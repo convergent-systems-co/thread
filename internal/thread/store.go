@@ -51,6 +51,8 @@ var safeID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$`)
 var kinds = map[string]bool{"project": true, "capture": true, "action": true, "decision": true, "discovery": true, "habit": true, "memory": true, "session": true, "run": true}
 var statuses = map[string]bool{"inbox": true, "suggested": true, "active": true, "paused": true, "blocked": true, "done": true, "archived": true}
 
+const itemFolder = ".items"
+
 func Now() string     { return time.Now().UTC().Format(time.RFC3339Nano) }
 func Machine() string { h, _ := os.Hostname(); return h }
 func DefaultDomain(machine string) string {
@@ -162,7 +164,7 @@ func (s *Store) New(n Note) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	folder := "Items"
+	folder := itemFolder
 	if n.Kind == "project" {
 		folder = "Projects"
 	}
@@ -217,7 +219,9 @@ func syncDir(path string) error {
 func (s *Store) Notes() ([]Note, error) {
 	var notes []Note
 	seen := map[string]bool{}
-	for _, dir := range []string{"Projects", "Items", "Runs"} {
+	// Keep reading the pre-.items location during upgrades. New records always
+	// publish to .items, while existing vaults can migrate without downtime.
+	for _, dir := range []string{"Projects", itemFolder, "Items", "Runs"} {
 		p, err := s.path(filepath.Join("Thread", dir))
 		if err != nil {
 			return nil, err

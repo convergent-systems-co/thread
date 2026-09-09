@@ -77,7 +77,7 @@ Thread/
   Overview.md         Generated overview; refresh with thread dashboard
   Guide.md            In-vault usage notes
   Projects/           Stable project IDs
-  Items/              Captures, actions, decisions, memory, habits, recovery notes
+  .items/             Thread-managed captures, actions, decisions, memory, habits, recovery notes
   Runs/               Immutable execution observations
   .history/           Prior versions of CLI-edited notes
 ```
