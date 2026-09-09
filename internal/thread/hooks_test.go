@@ -53,6 +53,42 @@ func TestClaudeHookSessionIsIdempotentAndLeavesBoundedResumeContext(t *testing.T
 	}
 }
 
+func TestClaudeHookAutoDiscoversUnknownRepository(t *testing.T) {
+	s := testStore(t)
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s", out)
+	}
+	p, err := s.HandleClaudeHook(mustHook(t, []byte(`{"session_id":"unknown-session","cwd":"`+repo+`","hook_event_name":"SessionStart"}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	common := mustCommonDir(t, repo)
+	n, err := s.Find("session-" + Hash([]byte("unknown-session\x00project-auto-" + Hash([]byte(common))[:32]))[:40])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Project == "" || n.Status != "active" {
+		t.Fatalf("bad auto-discovered session: %+v", n)
+	}
+	project, err := s.Project("project-auto-" + Hash([]byte(common))[:32])
+	if err != nil || project.Status != "paused" || project.Source != "auto-discovery" {
+		t.Fatalf("bad auto-discovered project: %+v, %v", project, err)
+	}
+	if filepath.Dir(p) != filepath.Join(s.Root, "Thread", ".items") {
+		t.Fatalf("session not stored in .items: %s", p)
+	}
+}
+
+func mustCommonDir(t *testing.T, repo string) string {
+	t.Helper()
+	b, err := exec.Command("git", "-C", repo, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b[:len(b)-1])
+}
+
 func mustHook(t *testing.T, b []byte) ClaudeHookEvent {
 	t.Helper()
 	e, err := DecodeHook(b)

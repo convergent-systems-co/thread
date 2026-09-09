@@ -2,7 +2,7 @@
 
 Thread is a Go command line and companion skill for capturing and resuming work across projects. Its backend is an Obsidian vault: Markdown, YAML properties, tags, and wiki links. There is no authoritative hidden database.
 
-This is a working first release, not yet an unattended development workstation. It provides fast capture, editable work states, relationships, fresh Git inspection, read-only develop/Praxis state imports, a portfolio overview, optional headless Claude classification, a narrow Claude lifecycle hook adapter, and verified local working-file snapshots. Manifold focus control, Copilot/Codex adapters, live session leases, automatic import polling, and cross-machine conflict reconciliation remain planned.
+This is a working first release, not yet an unattended development workstation. It provides fast capture, editable work states, relationships, fresh Git inspection, read-only develop/Praxis state imports, a portfolio overview, optional headless Claude classification, a narrow Claude lifecycle hook adapter with automatic unknown-repository discovery, and verified local working-file snapshots. Manifold focus control, Copilot/Codex adapters, live session leases, automatic import polling, and cross-machine conflict reconciliation remain planned.
 
 ## Start
 

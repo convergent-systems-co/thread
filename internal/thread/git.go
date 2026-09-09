@@ -3,6 +3,7 @@ package thread
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -91,8 +92,31 @@ func (s *Store) ResolveProject(id, repo string) (Note, error) {
 			matches = append(matches, n)
 		}
 	}
-	if len(matches) != 1 {
+	if len(matches) > 1 {
 		return Note{}, fmt.Errorf("found %d registered projects for this repository; pass --project ID or register it", len(matches))
+	}
+	if len(matches) == 0 {
+		// Every session is worth recovering. Create a conservative project shell
+		// instead of dropping an otherwise valid hook event. The repository's
+		// common Git directory gives worktrees one durable identity.
+		id := "project-auto-" + Hash([]byte(state.Common))[:32]
+		n := NewNote("project", filepath.Base(state.Root))
+		n.ID = id
+		n.Repo = state.Root
+		n.Domain = DefaultDomain(Machine())
+		n.Status = "paused"
+		n.Source = "auto-discovery"
+		n.Extra = map[string]any{"git_common_dir": state.Common, "discovered_from": repo}
+		n.Body = "\nAutomatically discovered by a Thread lifecycle hook. Confirm the project name, domain, and ownership before treating it as active work.\n"
+		path, createErr := s.New(n)
+		if createErr != nil && !os.IsExist(createErr) {
+			return Note{}, createErr
+		}
+		if createErr == nil {
+			n.Path = path
+			return n, nil
+		}
+		return s.Project(id)
 	}
 	return matches[0], nil
 }
