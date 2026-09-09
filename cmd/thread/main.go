@@ -32,6 +32,8 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
   organize --id ID             Extract suggestions from one capture using headless Claude
   snapshot --repo PATH         Preserve working files in a verified local ZIP
   verify --file ZIP            Verify archived files against recorded checksums
+  hook --provider claude --event EVENT
+                               Consume one Claude hook JSON payload from stdin
 
 Put flags before positional text. THREAD_VAULT supplies the vault by default.
 This foundation does not run development tasks or claim to back up your code.
@@ -89,6 +91,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	stdin := f.Bool("stdin", false, "read body from stdin")
 	asJSON := f.Bool("json", false, "JSON output")
 	provider := f.String("provider", "", "import provider")
+	eventName := f.String("event", "", "hook event")
 	file := f.String("file", "", "source state JSON")
 	from := f.String("from", "", "source ID")
 	to := f.String("to", "", "target ID")
@@ -283,6 +286,32 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		manifest, err := core.VerifySnapshot(*file)
 		if err == nil {
 			fmt.Fprintf(out, "Verified %d working files captured %s from %s\n", len(manifest.Files), manifest.Created, manifest.Git.Root)
+		}
+		return err
+	case "hook":
+		if *provider != "claude" {
+			return errors.New("hook currently supports --provider claude")
+		}
+		if *eventName == "" {
+			return errors.New("hook requires --event")
+		}
+		data, err := io.ReadAll(io.LimitReader(in, 4*1024*1024+1))
+		if err != nil {
+			return err
+		}
+		if len(data) > 4*1024*1024 {
+			return errors.New("hook payload exceeds 4 MiB")
+		}
+		e, err := core.DecodeHook(data)
+		if err != nil {
+			return err
+		}
+		if e.HookEventName == "" {
+			e.HookEventName = *eventName
+		}
+		p, err := s.HandleClaudeHook(e)
+		if err == nil {
+			fmt.Fprintln(out, p)
 		}
 		return err
 	case "organize":

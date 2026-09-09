@@ -2,7 +2,7 @@
 
 Thread is a Go command line and companion skill for capturing and resuming work across projects. Its backend is an Obsidian vault: Markdown, YAML properties, tags, and wiki links. There is no authoritative hidden database.
 
-This is a working first release, not yet an unattended development workstation. It provides fast capture, editable work states, relationships, fresh Git inspection, read-only develop/Praxis state imports, a portfolio overview, optional headless Claude classification, and verified local working-file snapshots. Manifold focus control, native lifecycle hooks, live session leases, automatic import polling, and cross-machine conflict reconciliation remain planned.
+This is a working first release, not yet an unattended development workstation. It provides fast capture, editable work states, relationships, fresh Git inspection, read-only develop/Praxis state imports, a portfolio overview, optional headless Claude classification, a narrow Claude lifecycle hook adapter, and verified local working-file snapshots. Manifold focus control, Copilot/Codex adapters, live session leases, automatic import polling, and cross-machine conflict reconciliation remain planned.
 
 ## Start
 
@@ -22,6 +22,7 @@ thread status --domain home
 thread set --id RECORD_ID --status paused --next 'Run the integration test'
 thread link --from RECORD_ID --to OTHER_RECORD_ID
 thread dashboard
+thread hook --provider claude --event session-start < hook-payload.json
 ```
 
 Flags precede positional text. `capture --stdin` reads multiline text without placing it in shell arguments. `show --id ID --json` and `resume --json` support agent/tool integrations.
@@ -85,7 +86,7 @@ Creation flushes a temporary file before exclusive publication. CLI updates take
 
 ## Companion skill
 
-`skills/thread/SKILL.md` guides capture, orientation, stopping-point memory, and recovery through the CLI. It can be installed into an assistant's supported skill directory. A skill is not a guaranteed startup hook. No global Claude/Copilot/Codex hook configuration is installed by this release.
+`skills/thread/SKILL.md` guides capture, orientation, stopping-point memory, and recovery through the CLI. It can be installed into an assistant's supported skill directory. The Claude adapter is opt-in: the command consumes hook JSON and records a session note, but no global Claude/Copilot/Codex hook configuration is installed by this release. `thread hook --provider claude --event session-start` prints a useful error if the repository is not registered.
 
 ## Development
 

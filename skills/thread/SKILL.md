@@ -29,4 +29,6 @@ When preserving working files is within the user's authorized scope, `thread sna
 
 ## Existing automation
 
-Import explicitly relevant run state with `thread import --provider develop|praxis --file STATE_JSON --project ID`. This reads the source without changing it. Imports preserve independent snapshots; metrics use the latest per source. Do not resume, modify, or prune source runs as part of capture. The current release has no Manifold focus bridge, automatic startup hooks, session-presence service, or background polling; describe these as planned, not running.
+Import explicitly relevant run state with `thread import --provider develop|praxis --file STATE_JSON --project ID`. This reads the source without changing it. Imports preserve independent snapshots; metrics use the latest per source. Do not resume, modify, or prune source runs as part of capture.
+
+Thread now has a narrow Claude hook adapter. Configure Claude Code's `SessionStart`, `Stop`, and `SessionEnd` command hooks to pipe their JSON payloads to `thread hook --provider claude --event EVENT`. The adapter records a session note by stable session/project ID and retains a bounded final assistant message as resume context. It does not capture every prompt, execute tools, or block Claude. Use `thread help` and `thread hook` errors as the source of truth; install no global hook automatically. Manifold focus, Copilot/Codex adapters, live session leases, and background polling remain planned.
