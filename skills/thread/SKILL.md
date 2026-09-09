@@ -13,6 +13,8 @@ At the start of work in a registered repository, run `thread resume --repo /abso
 
 If the project is unregistered, continue the user's task. When registration is within scope, use `thread project --id stable-slug --repo PATH --domain home|work TITLE`. Project identity survives branch/worktree changes. Odin is normally home and Hindal work; unknown hosts retain unknown classification until the user identifies the domain. Do not infer that storing work data in personal iCloud is acceptable for every project merely because another project is registered.
 
+To inventory personal repositories from a machine whose projects are not yet in Thread, use `thread extract --repo ROOT --source MACHINE_NAME --domain home`. The root must be locally mounted or copied first; a machine name is provenance, not remote access. The command is read-only against repositories and creates paused project records for new Git common directories only.
+
 ## Capture and remember
 
 Use `thread capture` for original user wording and `--stdin` for multiline input. Save meaningful decisions, commitments, next steps, discoveries, and explicit working preferences—not every conversational turn. Attach `--project ID` when known; leave ambiguous material in the inbox. Use `--kind action|decision|discovery|habit|memory`, `--source assistant`, and an appropriate status. AI proposals default to suggested; use active or paused only when the user's actual intent supports it. Do not turn an observation into a new obligation or invent priority, owners, deadlines, or measured performance.

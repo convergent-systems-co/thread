@@ -32,6 +32,8 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
   organize --id ID             Extract suggestions from one capture using headless Claude
   snapshot --repo PATH         Preserve working files in a verified local ZIP
   verify --file ZIP            Verify archived files against recorded checksums
+  extract --repo PATH --source MACHINE --domain home|work
+                               Register Git repositories under a machine root
   hook --provider claude --event EVENT
                                Consume one Claude hook JSON payload from stdin
 
@@ -107,6 +109,21 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		p, err := s.Dashboard()
 		if err == nil {
 			fmt.Fprintln(out, p)
+		}
+		return err
+	case "extract":
+		if *repo == "" {
+			return errors.New("extract requires --repo PATH as the inventory root")
+		}
+		if *domain == "" {
+			return errors.New("extract requires --domain home, work, or unknown")
+		}
+		if *source == "" || *source == "manual" {
+			return errors.New("extract requires --source MACHINE_NAME")
+		}
+		notes, err := s.ExtractRepositories(*repo, *source, *domain)
+		if err == nil {
+			fmt.Fprint(out, core.InventorySummary(notes))
 		}
 		return err
 	case "project":

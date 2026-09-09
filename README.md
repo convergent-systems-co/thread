@@ -23,11 +23,14 @@ thread set --id RECORD_ID --status paused --next 'Run the integration test'
 thread link --from RECORD_ID --to OTHER_RECORD_ID
 thread dashboard
 thread hook --provider claude --event session-start < hook-payload.json
+thread extract --repo /path/to/heimdall/projects --source heimdall --domain home
 ```
 
 Flags precede positional text. `capture --stdin` reads multiline text without placing it in shell arguments. `show --id ID --json` and `resume --json` support agent/tool integrations.
 
 Project domain overrides machine defaults. Odin defaults to home, Hindal to work; other hosts remain unknown. This release stores one registered local repository path per project; other machines need a future location mapping rather than overwriting paths back and forth. Explicit project IDs and Git common-directory matching keep worktrees associated with the same project. No Git remote is contacted.
+
+`thread extract` inventories repositories under a root you explicitly provide. `--source` is the machine name (for example `heimdall`) and `--domain home` marks the extracted projects as personal. It scans only a bounded local directory tree, follows no symlinks, and never clones, moves, edits, or deletes repositories. Existing projects are deduplicated by Git common directory. Thread cannot inspect an unreachable machine by name alone.
 
 ## Existing execution systems
 
