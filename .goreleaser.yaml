@@ -8,8 +8,8 @@ builds:
   - id: thread
     main: ./cmd/thread
     binary: thread
-    env: [CGO_ENABLED=0]
-    ldflags: [-s -w -X main.version={{.Version}}]
+    env: ["CGO_ENABLED=0"]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
     ignore:
