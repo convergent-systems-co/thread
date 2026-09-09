@@ -52,6 +52,7 @@ var kinds = map[string]bool{"project": true, "capture": true, "action": true, "d
 var statuses = map[string]bool{"inbox": true, "suggested": true, "active": true, "paused": true, "blocked": true, "done": true, "archived": true}
 
 const itemFolder = ".items"
+const runFolder = ".runs"
 
 func Now() string     { return time.Now().UTC().Format(time.RFC3339Nano) }
 func Machine() string { h, _ := os.Hostname(); return h }
@@ -169,7 +170,7 @@ func (s *Store) New(n Note) (string, error) {
 		folder = "Projects"
 	}
 	if n.Kind == "run" {
-		folder = "Runs"
+		folder = runFolder
 	}
 	rel := filepath.Join("Thread", folder, n.ID+".md")
 	p, err := s.path(rel)
@@ -221,7 +222,7 @@ func (s *Store) Notes() ([]Note, error) {
 	seen := map[string]bool{}
 	// Keep reading the pre-.items location during upgrades. New records always
 	// publish to .items, while existing vaults can migrate without downtime.
-	for _, dir := range []string{"Projects", itemFolder, "Items", "Runs"} {
+	for _, dir := range []string{"Projects", itemFolder, "Items", runFolder, "Runs"} {
 		p, err := s.path(filepath.Join("Thread", dir))
 		if err != nil {
 			return nil, err

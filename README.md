@@ -78,7 +78,7 @@ Thread/
   Guide.md            In-vault usage notes
   Projects/           Stable project IDs
   .items/             Thread-managed captures, actions, decisions, memory, habits, recovery notes
-  Runs/               Immutable execution observations
+  .runs/              Thread-managed immutable execution observations
   .history/           Prior versions of CLI-edited notes
 ```
 
