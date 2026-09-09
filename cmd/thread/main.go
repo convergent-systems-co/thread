@@ -38,12 +38,20 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
                                Register Git repositories under a machine root
   hook --provider claude --event EVENT
                                Consume one Claude hook JSON payload from stdin
+  skill install --client codex|claude|all [--force]
+                               Install the embedded Thread skill for an AI client
 
 Put flags before positional text. THREAD_VAULT supplies the vault by default.
 This foundation does not run development tasks or claim to back up your code.
 `
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-v" {
+			fmt.Println(version)
+			return
+		}
+	}
 	for _, arg := range os.Args[1:] {
 		if arg == "--version" || arg == "-v" {
 			fmt.Println(version)
@@ -82,6 +90,27 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "help" {
 		fmt.Fprint(out, usage)
 		return nil
+	}
+	if args[0] == "version" {
+		fmt.Fprintln(out, version)
+		return nil
+	}
+	if args[0] == "skill" {
+		if len(args) < 2 || args[1] != "install" {
+			return errors.New("usage: thread skill install --client codex|claude|all [--force]")
+		}
+		sk := flag.NewFlagSet("skill install", flag.ContinueOnError)
+		sk.SetOutput(out)
+		client := sk.String("client", "", "AI client")
+		force := sk.Bool("force", false, "replace changed files")
+		if err := sk.Parse(args[2:]); err != nil {
+			return err
+		}
+		paths, err := core.InstallSkill(*client, *force)
+		for _, p := range paths {
+			fmt.Fprintln(out, p)
+		}
+		return err
 	}
 	if args[0] == "version" {
 		fmt.Fprintln(out, version)

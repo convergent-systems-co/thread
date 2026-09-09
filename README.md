@@ -24,6 +24,7 @@ thread link --from RECORD_ID --to OTHER_RECORD_ID
 thread dashboard
 thread hook --provider claude --event session-start < hook-payload.json
 thread extract --repo /path/to/heimdall/projects --source heimdall --domain home
+thread skill install --client all
 ```
 
 Flags precede positional text. `capture --stdin` reads multiline text without placing it in shell arguments. `show --id ID --json` and `resume --json` support agent/tool integrations.
@@ -89,7 +90,7 @@ Creation flushes a temporary file before exclusive publication. CLI updates take
 
 ## Companion skill
 
-`skills/thread/SKILL.md` guides capture, orientation, stopping-point memory, and recovery through the CLI. It can be installed into an assistant's supported skill directory. The Claude adapter is opt-in: the command consumes hook JSON and records a session note, but no global Claude/Copilot/Codex hook configuration is installed by this release. `thread hook --provider claude --event session-start` prints a useful error if the repository is not registered.
+`skills/thread/SKILL.md` guides capture, orientation, stopping-point memory, and recovery through the CLI. The release binary embeds a compact copy and can install it with `thread skill install --client codex|claude|all`. It refuses to replace changed files unless `--force` is supplied. Copilot is not included in `all`: its skill discovery path and repository/user scope need a separate explicit adapter. The Claude lifecycle adapter is opt-in; no global hook configuration is installed automatically.
 
 ## Development
 

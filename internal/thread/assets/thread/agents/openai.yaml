@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thread"
+  short_description: "Capture and resume project work through Obsidian"
+  default_prompt: "Use $thread to show where I left off in this project and a useful next action."
