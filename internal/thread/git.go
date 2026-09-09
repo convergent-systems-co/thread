@@ -106,7 +106,7 @@ func (s *Store) ResolveProject(id, repo string) (Note, error) {
 		n.Domain = DefaultDomain(Machine())
 		n.Status = "paused"
 		n.Source = "auto-discovery"
-		n.Extra = map[string]any{"git_common_dir": state.Common, "discovered_from": repo}
+		n.Extra = map[string]any{"git_common_dir": state.Common, "discovered_from": repo, "identity_status": "temporary", "suggested_name": filepath.Base(state.Root)}
 		n.Body = "\nAutomatically discovered by a Thread lifecycle hook. Confirm the project name, domain, and ownership before treating it as active work.\n"
 		path, createErr := s.New(n)
 		if createErr != nil && !os.IsExist(createErr) {

@@ -5,7 +5,7 @@ description: Capture commitments, decisions, discoveries, and working preference
 
 # Thread
 
-Use `thread resume --repo /absolute/current/worktree --json` at the start of work. If the repository is unregistered, Claude lifecycle hooks create a paused project shell automatically so the session is not lost; confirm its title, domain, and ownership before activating it. Present the project, domain, worktree/branch, recorded stopping point, one next action, and source freshness. Verify current Git state before asserting completion.
+Use `thread resume --repo /absolute/current/worktree --json` at the start of work. If the repository is unregistered, Claude lifecycle hooks create a paused project shell automatically so the session is not lost; when `identity_status` is `temporary`, ask the user for a project name and domain when convenient, without blocking work. Present the project, domain, worktree/branch, recorded stopping point, one next action, and source freshness. Verify current Git state before asserting completion.
 
 Use `thread capture --project ID --kind action|decision|discovery|habit|memory` for meaningful work memory. Preserve original wording and evidence. AI proposals stay `suggested` until the user adopts them. Use `thread set` for state changes and `thread link` for explicit relationships.
 
