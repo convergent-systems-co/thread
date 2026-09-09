@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -38,6 +39,8 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
                                Register Git repositories under a machine root
   hook --provider claude --event EVENT
                                Consume one Claude hook JSON payload from stdin
+  codex [--] [CODEX_ARGS]
+                               Run Codex CLI with Thread lifecycle capture
   skill install --client codex|claude|all [--force]
                                Install the embedded Thread skill for an AI client
 
@@ -119,6 +122,9 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	s, err := core.Open(*vault)
 	if err != nil {
 		return err
+	}
+	if args[0] == "codex" {
+		return s.RunCodex(context.Background(), args[1:], in, out, os.Stderr)
 	}
 	f := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	f.SetOutput(out)

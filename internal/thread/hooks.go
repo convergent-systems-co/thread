@@ -12,6 +12,7 @@ import (
 // ClaudeHookEvent is the stable subset of Claude Code hook payloads Thread
 // needs. Unknown fields are intentionally ignored for forward compatibility.
 type ClaudeHookEvent struct {
+	Provider             string `json:"provider"`
 	SessionID            string `json:"session_id"`
 	Cwd                  string `json:"cwd"`
 	HookEventName        string `json:"hook_event_name"`
@@ -43,7 +44,11 @@ func (s *Store) HandleClaudeHook(event ClaudeHookEvent) (string, error) {
 	name := "Claude session " + event.SessionID
 	n := NewNote("session", name)
 	n.ID = "session-" + Hash([]byte(event.SessionID + "\x00" + project.ID))[:40]
-	n.Source = "claude-hook"
+	provider := event.Provider
+	if provider == "" {
+		provider = "claude"
+	}
+	n.Source = provider + "-hook"
 	n.Status = "active"
 	n.Repo = event.Cwd
 	n.Project = s.Link(project)
