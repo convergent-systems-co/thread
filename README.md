@@ -92,6 +92,21 @@ Creation flushes a temporary file before exclusive publication. CLI updates take
 
 `skills/thread/SKILL.md` guides capture, orientation, stopping-point memory, and recovery through the CLI. The release binary embeds a compact copy and can install it with `thread skill install --client codex|claude|all`. It refuses to replace changed files unless `--force` is supplied. Copilot is not included in `all`: its skill discovery path and repository/user scope need a separate explicit adapter. The Claude lifecycle adapter is opt-in; no global hook configuration is installed automatically.
 
+## Install released binaries
+
+```sh
+brew tap convergent-systems-co/tap
+brew install convergent-systems-co/tap/thread
+```
+
+Windows x64 can install the portable release through Winget after its manifest is accepted:
+
+```powershell
+winget install --id ConvergentSystemsCo.Thread
+```
+
+The current manifest is kept under `packaging/winget/`. It is not claimed to be in the public Winget source until Microsoft accepts the submission.
+
 ## Development
 
 ```sh

@@ -1,0 +1,13 @@
+PackageIdentifier: ConvergentSystemsCo.Thread
+PackageVersion: 0.1.1
+PackageLocale: en-US
+Publisher: Convergent Systems Co
+PublisherUrl: https://github.com/convergent-systems-co
+PackageName: Thread
+PackageUrl: https://github.com/convergent-systems-co/thread
+License: MIT
+LicenseUrl: https://github.com/convergent-systems-co/thread/blob/main/LICENSE
+ShortDescription: Obsidian-backed memory and resume CLI for AI-assisted work
+Description: Capture commitments, decisions, discoveries, and working preferences, then resume registered projects from an Obsidian vault.
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

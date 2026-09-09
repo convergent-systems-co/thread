@@ -1,0 +1,13 @@
+PackageIdentifier: ConvergentSystemsCo.Thread
+PackageVersion: 0.1.1
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: thread.exe
+    PortableCommandAlias: thread
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/convergent-systems-co/thread/releases/download/v0.1.1/thread_0.1.1_windows_amd64.zip
+    InstallerSha256: 25EFCEA95CAF8E5CE9C9D3E02159AAF8D7A91C5E290C83ACB59BAC1F5CF09A56
+ManifestType: installer
+ManifestVersion: 1.9.0
