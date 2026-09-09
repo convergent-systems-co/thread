@@ -13,6 +13,8 @@ import (
 	core "github.com/convergent-systems-co/thread/internal/thread"
 )
 
+var version = "dev"
+
 const usage = `Thread — capture and resume work through an Obsidian vault.
 
 Usage: thread [--vault PATH] COMMAND [flags] [text]
@@ -42,6 +44,12 @@ This foundation does not run development tasks or claim to back up your code.
 `
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-v" {
+			fmt.Println(version)
+			return
+		}
+	}
 	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "thread:", err)
 		os.Exit(1)
@@ -73,6 +81,10 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	args = global.Args()
 	if len(args) == 0 || args[0] == "help" {
 		fmt.Fprint(out, usage)
+		return nil
+	}
+	if args[0] == "version" {
+		fmt.Fprintln(out, version)
 		return nil
 	}
 	s, err := core.Open(*vault)
