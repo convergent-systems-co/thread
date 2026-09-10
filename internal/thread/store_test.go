@@ -16,6 +16,26 @@ func testStore(t *testing.T) *Store {
 	}
 	return s
 }
+
+func TestNewCaptureAlwaysUsesHiddenItemsWithLegacyFolderPresent(t *testing.T) {
+	s := testStore(t)
+	legacy := filepath.Join(s.Root, "Thread", "Items")
+	if err := os.MkdirAll(legacy, 0700); err != nil {
+		t.Fatal(err)
+	}
+	n := NewNote("capture", "Canonical storage regression")
+	path, err := s.New(n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Join(s.Root, "Thread", ".items", n.ID+".md") {
+		t.Fatalf("capture used noncanonical path: %s", path)
+	}
+	entries, err := os.ReadDir(legacy)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("capture wrote into legacy storage: %v %v", entries, err)
+	}
+}
 func TestCaptureConcurrentAndUpdatePreservesUserContent(t *testing.T) {
 	s := testStore(t)
 	var wg sync.WaitGroup

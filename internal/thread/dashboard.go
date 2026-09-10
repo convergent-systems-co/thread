@@ -61,7 +61,7 @@ func (s *Store) Overview(domain string) (string, error) {
 	b.WriteString("## Work to resume\n\n")
 	count := 0
 	for _, n := range notes {
-		if !filter(n) || n.Kind == "run" || n.Kind == "project" || n.Status == "done" || n.Status == "archived" || n.Status == "inbox" || n.Status == "suggested" {
+		if !filter(n) || n.Kind == "run" || n.Kind == "event" || n.Kind == "checkpoint" || n.Kind == "project" || n.Status == "done" || n.Status == "archived" || n.Status == "inbox" || n.Status == "suggested" {
 			continue
 		}
 		count++
@@ -73,7 +73,7 @@ func (s *Store) Overview(domain string) (string, error) {
 	b.WriteString("\n## Needs attention\n\n")
 	count = 0
 	for _, n := range notes {
-		if !filter(n) || n.Kind == "run" || n.Status == "done" || n.Status == "archived" {
+		if !filter(n) || n.Kind == "run" || n.Kind == "event" || n.Kind == "checkpoint" || n.Status == "done" || n.Status == "archived" {
 			continue
 		}
 		var reasons []string

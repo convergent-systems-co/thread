@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -20,6 +19,8 @@ type ClaudeHookEvent struct {
 	Prompt               string `json:"prompt"`
 	LastAssistantMessage string `json:"last_assistant_message"`
 	TranscriptPath       string `json:"transcript_path"`
+	EventID              string `json:"event_id"`
+	OccurredAt           string `json:"occurred_at"`
 }
 
 func DecodeHook(data []byte) (ClaudeHookEvent, error) {
@@ -37,53 +38,50 @@ func DecodeHook(data []byte) (ClaudeHookEvent, error) {
 }
 
 func (s *Store) HandleClaudeHook(event ClaudeHookEvent) (string, error) {
+	types := map[string]string{
+		"SessionStart": "session.started", "session-start": "session.started",
+		"SessionEnd": "session.stopped", "session-end": "session.stopped",
+		"Stop": "session.idle", "stop": "session.idle",
+		"UserPromptSubmit": "prompt.started", "prompt-started": "prompt.started",
+		"PreToolUse": "tool.before", "PostToolUse": "tool.after",
+	}
+	eventType, ok := types[event.HookEventName]
+	if !ok {
+		return "", fmt.Errorf("unsupported Claude hook event %q", event.HookEventName)
+	}
+	if event.Provider != "" && event.Provider != "claude" {
+		return "", errors.New("Claude hook adapter accepts only Claude events; use the normalized event interface")
+	}
 	project, err := s.ResolveProject("", event.Cwd)
 	if err != nil {
 		return "", err
 	}
-	name := "Claude session " + event.SessionID
-	n := NewNote("session", name)
-	n.ID = "session-" + Hash([]byte(event.SessionID + "\x00" + project.ID))[:40]
-	provider := event.Provider
-	if provider == "" {
-		provider = "claude"
+	e := Event{Schema: 1, ID: event.EventID, Type: eventType, Source: "claude",
+		SessionID: event.SessionID, ProjectID: project.ID, Repo: event.Cwd,
+		Machine: Machine(), OccurredAt: event.OccurredAt, Text: event.LastAssistantMessage,
+		Data: map[string]any{"hook_event": event.HookEventName}}
+	if event.Prompt != "" {
+		e.Data["prompt"] = event.Prompt
 	}
-	n.Source = provider + "-hook"
-	n.Status = "active"
-	n.Repo = event.Cwd
-	n.Project = s.Link(project)
-	n.Extra = map[string]any{"session_id": event.SessionID, "cwd": event.Cwd, "hook_event": event.HookEventName}
 	if event.TranscriptPath != "" {
-		n.Extra["transcript_path"] = event.TranscriptPath
+		e.References = []string{event.TranscriptPath}
 	}
 	if event.Reason != "" {
-		n.Extra["reason"] = event.Reason
+		e.Data["reason"] = event.Reason
 	}
-
-	// SessionStart is idempotent. Other events update the same session note.
-	if existing, findErr := s.Find(n.ID); findErr == nil {
-		return existing.Path, s.Update(n.ID, func(current *Note) error {
-			current.Extra["last_hook_event"] = event.HookEventName
-			if event.Reason != "" {
-				current.Extra["reason"] = event.Reason
-			}
-			if event.LastAssistantMessage != "" {
-				current.Next = firstLine(event.LastAssistantMessage)
-				current.Body += "\n## " + event.HookEventName + "\n\n" + bounded(event.LastAssistantMessage) + "\n"
-			}
-			if event.HookEventName == "SessionEnd" {
-				current.Status = "paused"
-			}
-			return nil
-		})
-	} else if !os.IsNotExist(findErr) && !strings.Contains(findErr.Error(), "not found") {
-		return "", findErr
+	if e.OccurredAt == "" {
+		e.Data["timestamp_basis"] = "received; producer did not supply occurred_at"
 	}
-	n.Body = "\nStarted in `" + event.Cwd + "`.\n\n"
-	if event.LastAssistantMessage != "" {
-		n.Body += "## " + event.HookEventName + "\n\n" + bounded(event.LastAssistantMessage) + "\n"
+	if e.ID == "" {
+		// Hooks without delivery IDs cannot distinguish identical occurrences.
+		// Deduplicate exact payloads rather than inventing extra lifecycle facts.
+		raw, err := json.Marshal(e)
+		if err != nil {
+			return "", err
+		}
+		e.ID = "hook-" + Hash(raw)
 	}
-	return s.New(n)
+	return s.captureEvent(e, e.OccurredAt == "")
 }
 
 func firstLine(text string) string {

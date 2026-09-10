@@ -36,20 +36,24 @@ func TestClaudeHookSessionIsIdempotentAndLeavesBoundedResumeContext(t *testing.T
 	if _, err = s.HandleClaudeHook(mustHook(t, stop)); err != nil {
 		t.Fatal(err)
 	}
-	n, err := s.Find("session-" + Hash([]byte("s1\x00hook-project"))[:40])
+	o, err := s.Orient(p.ID, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.Next != "Implemented the first slice." || n.Status != "active" {
-		t.Fatalf("bad stop state: %+v", n)
+	if len(o.Sessions) != 1 || o.Sessions[0].State != "idle" || len(o.Work) != 0 {
+		t.Fatalf("idle observation became work: %+v", o)
 	}
 	end, _ := json.Marshal(map[string]any{"session_id": "s1", "cwd": repo, "hook_event_name": "SessionEnd", "reason": "user_exit"})
 	if _, err = s.HandleClaudeHook(mustHook(t, end)); err != nil {
 		t.Fatal(err)
 	}
-	n, _ = s.Find(n.ID)
-	if n.Status != "paused" || n.Extra["reason"] != "user_exit" {
-		t.Fatalf("bad end state: %+v", n)
+	o, err = s.Orient(p.ID, 5)
+	if err != nil || len(o.Sessions) != 1 || o.Sessions[0].State != "stopped" {
+		t.Fatalf("bad end state: %+v, %v", o, err)
+	}
+	notes, err := s.Notes()
+	if err != nil || len(notes) != 4 {
+		t.Fatalf("expected project and three immutable observations: %d, %v", len(notes), err)
 	}
 }
 
@@ -64,19 +68,19 @@ func TestClaudeHookAutoDiscoversUnknownRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	common := mustCommonDir(t, repo)
-	n, err := s.Find("session-" + Hash([]byte("unknown-session\x00project-auto-" + Hash([]byte(common))[:32]))[:40])
+	notes, err := s.Notes()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.Project == "" || n.Status != "active" {
-		t.Fatalf("bad auto-discovered session: %+v", n)
+	if len(notes) != 2 {
+		t.Fatalf("expected project and event: %+v", notes)
 	}
 	project, err := s.Project("project-auto-" + Hash([]byte(common))[:32])
 	if err != nil || project.Status != "paused" || project.Source != "auto-discovery" {
 		t.Fatalf("bad auto-discovered project: %+v, %v", project, err)
 	}
-	if filepath.Dir(p) != filepath.Join(s.Root, "Thread", ".items") {
-		t.Fatalf("session not stored in .items: %s", p)
+	if filepath.Dir(p) != filepath.Join(s.Root, "Thread", ".events") {
+		t.Fatalf("event not stored in .events: %s", p)
 	}
 }
 

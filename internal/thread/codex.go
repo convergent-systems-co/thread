@@ -2,11 +2,11 @@ package thread
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 )
 
@@ -22,8 +22,14 @@ func (s *Store) RunCodex(ctx context.Context, args []string, in io.Reader, out, 
 		return err
 	}
 	sessionID := "codex-" + ID()
-	start := ClaudeHookEvent{Provider: "codex", SessionID: sessionID, Cwd: cwd, HookEventName: "SessionStart"}
-	if _, err = s.HandleClaudeHook(start); err != nil {
+	project, err := s.ResolveProject("", cwd)
+	if err != nil {
+		return err
+	}
+	start := Event{Schema: 1, ID: sessionID + "-start", Source: "codex",
+		SessionID: sessionID, Repo: cwd, ProjectID: project.ID, Machine: Machine(),
+		Type: "session.started", OccurredAt: Now()}
+	if _, err = s.CaptureEvent(start); err != nil {
 		return err
 	}
 	cmd := exec.CommandContext(ctx, "codex", args...)
@@ -39,9 +45,9 @@ func (s *Store) RunCodex(ctx context.Context, args []string, in io.Reader, out, 
 			message = fmt.Sprintf("Codex exited with status %d.", exitErr.ExitCode())
 		}
 	}
-	end := ClaudeHookEvent{Provider: "codex", SessionID: sessionID, Cwd: filepath.Clean(cwd), HookEventName: "SessionEnd", Reason: reason, LastAssistantMessage: message}
-	if _, endErr := s.HandleClaudeHook(end); runErr == nil {
-		runErr = endErr
-	}
-	return runErr
+	end := start
+	end.ID, end.Type, end.OccurredAt = sessionID+"-end", "session.stopped", Now()
+	end.Text, end.Data = message, map[string]any{"reason": reason}
+	_, endErr := s.CaptureEvent(end)
+	return errors.Join(runErr, endErr)
 }

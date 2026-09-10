@@ -2,7 +2,7 @@
 
 Thread is a Go command line and companion skill for capturing and resuming work across projects. Its backend is an Obsidian vault: Markdown, YAML properties, tags, and wiki links. There is no authoritative hidden database.
 
-This is a working first release, not yet an unattended development workstation. It provides fast capture, editable work states, relationships, fresh Git inspection, read-only develop/Praxis state imports, a portfolio overview, optional headless Claude classification, a narrow Claude lifecycle hook adapter with automatic unknown-repository discovery, and verified local working-file snapshots. Manifold focus control, Copilot/Codex adapters, live session leases, automatic import polling, and cross-machine conflict reconciliation remain planned.
+Thread stores operational memory for the human across tools and models. It provides deterministic event capture, compact offline orientation, source-linked checkpoints, attention cues, editable work states, relationships, fresh Git inspection, read-only develop/Praxis state imports, optional headless Claude interpretation, Claude lifecycle hooks, a Codex CLI wrapper, and verified local working-file snapshots. Manifold focus control, Copilot adapters, live session leases, automatic import polling, and cross-machine conflict reconciliation remain planned.
 
 ## Start
 
@@ -18,6 +18,9 @@ Set `THREAD_VAULT`, or put `{"vault":"/absolute/path/to/vault"}` in `~/.config/t
 thread capture 'Customer review needs X, Y, and Z'
 thread capture --project atlas --kind action --status active --next 'Ask Dana which format is required' 'Export requirements'
 thread resume --repo /path/to/atlas
+thread event < event.json
+thread context --project atlas
+thread checkpoint --project atlas
 thread status --domain home
 thread set --id RECORD_ID --status paused --next 'Run the integration test'
 thread link --from RECORD_ID --to OTHER_RECORD_ID
@@ -32,6 +35,18 @@ Flags precede positional text. `capture --stdin` reads multiline text without pl
 Project domain overrides machine defaults. Odin defaults to home, Hindal to work; other hosts remain unknown. This release stores one registered local repository path per project; other machines need a future location mapping rather than overwriting paths back and forth. Explicit project IDs and Git common-directory matching keep worktrees associated with the same project. No Git remote is contacted.
 
 `thread extract` inventories repositories under a root you explicitly provide. `--source` is the machine name (for example `heimdall`) and `--domain home` marks the extracted projects as personal. It scans only a bounded local directory tree, follows no symlinks, and never clones, moves, edits, or deletes repositories. Existing projects are deduplicated by Git common directory. Thread cannot inspect an unreachable machine by name alone.
+
+## Operational memory
+
+Capture, interpretation, consolidation, retrieval, and attention management are separate operations. `thread event` captures one provider-neutral event without AI, repository inspection, or project registration. Producers supply stable delivery IDs so retries are idempotent; conflicting payloads retain the original and return an error. See the [event contract](docs/events.md) for the JSON interface and adapter behavior.
+
+`thread context --project atlas [--limit 5] [--json]` returns a bounded brief: return cues, references, suggestions, observations, last observed sessions, and reasons something needs attention or can be set down. It works when the repository or original machine is unavailable. Each section contains at most the requested number of cues (1–20), with omitted counts and source links for deeper retrieval through `show` or Obsidian. Prompt/tool details and opaque provider data stay out of the brief. `resume` retains its existing repository inspection behavior.
+
+`thread checkpoint --project atlas` consolidates the brief into an immutable Markdown note. Identical views deduplicate; changed views create a new checkpoint. Checkpoints are historical, bounded summaries with links to evidence. Original notes remain available; there is no automatic deletion or retention worker.
+
+Attention cues use recorded evidence: a paused item with a return cue can be set down; blockers and missing return cues need attention. Saved suggestions remain unaccepted. An idle/stopped session establishes only a captured lifecycle boundary. A start without a later boundary means current activity is unknown. These cues neither schedule reminders nor establish completion or code recovery.
+
+Additional capture kinds are `assumption`, `question`, `constraint`, `artifact`, `dependency`, `risk`, `direction`, and `outcome`. Completed or abandoned work can be explicitly recorded with `done` or `archived`, preserving the explanation in the body. Optional `organize` proposes these kinds with exact supporting evidence; every proposal remains `suggested`. It accepts captures or a normalized event's `text`; opaque event data and referenced files are not sent to the model.
 
 ## Existing execution systems
 
@@ -79,6 +94,7 @@ Thread/
   Projects/           Stable project IDs
   .items/             Thread-managed captures, actions, decisions, memory, habits, recovery notes
   .runs/              Thread-managed immutable execution observations
+  .events/            Immutable provider-neutral lifecycle and evidence events
   .history/           Prior versions of CLI-edited notes
 ```
 

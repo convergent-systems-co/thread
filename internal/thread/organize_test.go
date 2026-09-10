@@ -5,8 +5,37 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestOrganizeEventUsesOnlyOriginalText(t *testing.T) {
+	s := testStore(t)
+	e := testEvent()
+	e.Text = "The cache may be stale."
+	e.Data = map[string]any{"private": "opaque payload"}
+	if _, err := s.CaptureEvent(e); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := s.Organize(eventNoteID(e.Source, e.ID), func(_ context.Context, prompt string) ([]byte, error) {
+		if strings.Contains(prompt, "opaque payload") {
+			t.Fatal("sent opaque event data to model")
+		}
+		return []byte(`{"items":[{"kind":"assumption","title":"Cache may be stale","next":"","evidence":"The cache may be stale."}]}`), nil
+	})
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("interpretation: %v %v", paths, err)
+	}
+	notes, err := s.Notes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range notes {
+		if n.Kind == "assumption" && (n.Status != "suggested" || len(n.Related) != 1) {
+			t.Fatalf("lost provenance or promoted claim: %+v", n)
+		}
+	}
+}
 
 func writeState(t *testing.T, body string) string {
 	t.Helper()

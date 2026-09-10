@@ -28,6 +28,10 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
   set --id ID [--status STATE] [--next TEXT] [--domain home|work]
   link --from ID --to ID        Add an explicit relationship
   resume [--project ID] [--repo PATH] [--json]
+  event                        Capture one normalized event JSON object from stdin
+  context --project ID [--limit 5] [--json]
+                               Read a compact operational brief, even offline
+  checkpoint --project ID      Save a source-linked operational brief
   status [--domain home|work]    Portfolio overview in the terminal
   show --id ID [--json]         Read one record
   import --provider develop|praxis --file STATE_JSON --project ID
@@ -37,8 +41,8 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
   verify --file ZIP            Verify archived files against recorded checksums
   extract --repo PATH --source MACHINE --domain home|work
                                Register Git repositories under a machine root
-  hook --provider claude --event EVENT
-                               Consume one Claude hook JSON payload from stdin
+  hook --provider claude|codex --event EVENT
+                               Consume one native hook JSON payload from stdin
   codex [--] [CODEX_ARGS]
                                Run Codex CLI with Thread lifecycle capture
   skill install --client codex|claude|all [--force]
@@ -144,11 +148,42 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	file := f.String("file", "", "source state JSON")
 	from := f.String("from", "", "source ID")
 	to := f.String("to", "", "target ID")
+	limit := f.Int("limit", 5, "maximum cues per context section (1–20)")
 	if err = f.Parse(args[1:]); err != nil {
 		return err
 	}
 	text := strings.TrimSpace(strings.Join(f.Args(), " "))
 	switch args[0] {
+	case "event":
+		data, err := io.ReadAll(io.LimitReader(in, core.MaxEventBytes+1))
+		if err != nil {
+			return err
+		}
+		e, err := core.DecodeEvent(data)
+		if err != nil {
+			return err
+		}
+		path, err := s.CaptureEvent(e)
+		if err == nil {
+			fmt.Fprintln(out, path)
+		}
+		return err
+	case "context":
+		o, err := s.Orient(*project, *limit)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return json.NewEncoder(out).Encode(o)
+		}
+		fmt.Fprint(out, core.RenderOrientation(o))
+		return nil
+	case "checkpoint":
+		path, err := s.Checkpoint(*project)
+		if err == nil {
+			fmt.Fprintln(out, path)
+		}
+		return err
 	case "init":
 		if err = s.Init(); err != nil {
 			return err
@@ -219,8 +254,8 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		if len([]rune(text)) > 160 {
 			text = string([]rune(text)[:160]) + "…"
 		}
-		if *kind == "project" || *kind == "run" {
-			return errors.New("use project/import for this kind")
+		if *kind == "project" || *kind == "run" || *kind == "event" || *kind == "checkpoint" {
+			return errors.New("use project/import/event/checkpoint for this kind")
 		}
 		n := core.NewNote(*kind, text)
 		n.Source = *source
@@ -353,8 +388,8 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		return err
 	case "hook":
-		if *provider != "claude" {
-			return errors.New("hook currently supports --provider claude")
+		if *provider != "claude" && *provider != "codex" {
+			return errors.New("hook supports --provider claude or codex")
 		}
 		if *eventName == "" {
 			return errors.New("hook requires --event")
@@ -365,6 +400,13 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		if len(data) > 4*1024*1024 {
 			return errors.New("hook payload exceeds 4 MiB")
+		}
+		if *provider == "codex" {
+			brief, err := s.HandleCodexHook(data, *eventName)
+			if err == nil && brief != "" {
+				fmt.Fprint(out, brief)
+			}
+			return err
 		}
 		e, err := core.DecodeHook(data)
 		if err != nil {
@@ -423,7 +465,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		var items []core.Note
 		for _, n := range notes {
-			if core.SameLink(n.Project, s.Link(p)) && n.Status != "done" && n.Status != "archived" && n.Kind != "run" {
+			if core.SameLink(n.Project, s.Link(p)) && n.Status != "done" && n.Status != "archived" && n.Kind != "run" && n.Kind != "event" && n.Kind != "checkpoint" {
 				items = append(items, n)
 			}
 		}

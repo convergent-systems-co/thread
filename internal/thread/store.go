@@ -48,7 +48,7 @@ type Note struct {
 type Store struct{ Root string }
 
 var safeID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$`)
-var kinds = map[string]bool{"project": true, "capture": true, "action": true, "decision": true, "discovery": true, "habit": true, "memory": true, "session": true, "run": true}
+var kinds = map[string]bool{"project": true, "capture": true, "action": true, "decision": true, "discovery": true, "habit": true, "memory": true, "session": true, "run": true, "event": true, "checkpoint": true, "assumption": true, "question": true, "constraint": true, "artifact": true, "dependency": true, "risk": true, "direction": true, "outcome": true}
 var statuses = map[string]bool{"inbox": true, "suggested": true, "active": true, "paused": true, "blocked": true, "done": true, "archived": true}
 
 const itemFolder = ".items"
@@ -172,6 +172,9 @@ func (s *Store) New(n Note) (string, error) {
 	if n.Kind == "run" {
 		folder = runFolder
 	}
+	if n.Kind == "event" {
+		folder = eventFolder
+	}
 	rel := filepath.Join("Thread", folder, n.ID+".md")
 	p, err := s.path(rel)
 	if err != nil {
@@ -222,7 +225,7 @@ func (s *Store) Notes() ([]Note, error) {
 	seen := map[string]bool{}
 	// Keep reading the pre-.items location during upgrades. New records always
 	// publish to .items, while existing vaults can migrate without downtime.
-	for _, dir := range []string{"Projects", itemFolder, "Items", runFolder, "Runs"} {
+	for _, dir := range []string{"Projects", itemFolder, "Items", runFolder, "Runs", eventFolder} {
 		p, err := s.path(filepath.Join("Thread", dir))
 		if err != nil {
 			return nil, err
@@ -307,6 +310,9 @@ func (s *Store) Update(id string, change func(*Note) error) error {
 	n, err := s.Find(id)
 	if err != nil {
 		return err
+	}
+	if n.Kind == "event" || n.Kind == "checkpoint" {
+		return errors.New("events and checkpoints are immutable; create a linked capture instead")
 	}
 	lock := n.Path + ".thread-lock"
 	f, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
