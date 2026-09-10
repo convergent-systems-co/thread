@@ -35,7 +35,8 @@ Usage: thread [--vault PATH] COMMAND [flags] [text]
   status [--domain home|work]    Portfolio overview in the terminal
   show --id ID [--json]         Read one record
   import --provider develop|praxis --file STATE_JSON --project ID
-  dashboard                    Refresh the generated Obsidian overview
+  dashboard [--domain home|work|unknown]
+                               Refresh the generated Obsidian overview
   organize --id ID             Extract suggestions from one capture using headless Claude
   snapshot --repo PATH         Preserve working files in a verified local ZIP
   verify --file ZIP            Verify archived files against recorded checksums
@@ -188,7 +189,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		if err = s.Init(); err != nil {
 			return err
 		}
-		p, err := s.Dashboard()
+		p, err := s.Dashboard("")
 		if err == nil {
 			fmt.Fprintln(out, p)
 		}
@@ -348,9 +349,9 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		return err
 	case "dashboard":
-		p, err := s.Dashboard()
+		p, err := s.Dashboard(*domain)
 		if err == nil {
-			fmt.Fprintln(out, p)
+			fmt.Fprintf(out, "Updated Thread dashboard: %s\n", p)
 		}
 		return err
 	case "snapshot":

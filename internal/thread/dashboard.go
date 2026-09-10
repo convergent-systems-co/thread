@@ -37,7 +37,7 @@ func (s *Store) Init() error {
 	content := map[string]string{
 		"Thread/Thread.base":   bases,
 		"Thread/Start Here.md": "# Thread\n\nA place to put work down and pick it up again.\n\n![[Thread/Thread.base]]\n\n[[Thread/Overview|Latest overview]] · [[Thread/Guide|How Thread works]]\n",
-		"Thread/Guide.md":      "# Using Thread\n\nCapture first; organize later. Edit item properties in Obsidian: `status`, `next`, `tags`, `related`, and `domain`. CLI updates preserve extra properties and body text.\n\nStatuses: inbox, suggested, active, paused, blocked, done, archived. Suggestions are not commitments. Set one concrete `next` action on active work.\n\nEach item links to its project. Use `related` links for dependencies and shared ideas; explain the relationship in the note body. The graph follows these links.\n\n`.items/` and `.runs/` are Thread-managed storage. `.items/` contains captures, sessions, and recovery records; `.runs/` contains immutable execution observations. Do not move, rename, or reorganize files there manually. Humans may correct item properties when needed; use the CLI for lifecycle changes.\n\nRun observations are immutable snapshots from develop/Praxis. Thread does not advance their execution state. The generated Overview is refreshed by `thread dashboard`; human-facing work views live in Start Here, Overview, Thread.base, and project notes.\n\nCLI edits keep prior note versions in `Thread/.history`. This is local note history, not a separate backup or code protection. Avoid editing the same note simultaneously on multiple machines: iCloud is eventually consistent. Duplicate IDs and malformed notes are surfaced as errors.\n\nUse `thread snapshot --repo PATH` for a verified local working-file ZIP and `thread organize --id ID` for optional headless Claude classification. Automatic hooks, live sessions, and background polling are not enabled in this release. Unknown metrics are not zero, and session duration is not human working time.\n",
+		"Thread/Guide.md":      "# Using Thread\n\nCapture first; organize later. Edit item properties in Obsidian: `status`, `next`, `tags`, `related`, and `domain`. CLI updates preserve extra properties and body text.\n\nStatuses: inbox, suggested, active, paused, blocked, done, archived. Suggestions are not commitments. Set one concrete `next` action on active work.\n\nEach item links to its project. Use `related` links for dependencies and shared ideas; explain the relationship in the note body. The graph follows these links.\n\n`.items/` and `.runs/` are Thread-managed storage. `.items/` contains captures, sessions, and recovery records; `.runs/` contains immutable execution observations. Do not move, rename, or reorganize files there manually. Humans may correct item properties when needed; use the CLI for lifecycle changes.\n\nRun observations are immutable snapshots from develop/Praxis. Thread does not advance their execution state. The generated Overview is refreshed by `thread dashboard [--domain home|work|unknown]`; the command writes the Markdown view and does not open Obsidian. Human-facing work views live in Start Here, Overview, Thread.base, and project notes.\n\nCLI edits keep prior note versions in `Thread/.history`. This is local note history, not a separate backup or code protection. Avoid editing the same note simultaneously on multiple machines: iCloud is eventually consistent. Duplicate IDs and malformed notes are surfaced as errors.\n\nUse `thread snapshot --repo PATH` for a verified local working-file ZIP and `thread organize --id ID` for optional headless Claude classification. Automatic hooks, live sessions, and background polling are not enabled in this release. Unknown metrics are not zero, and session duration is not human working time.\n",
 	}
 	for rel, body := range content {
 		p, err := s.path(rel)
@@ -154,8 +154,11 @@ func defaultText(a, b string) string {
 	}
 	return a
 }
-func (s *Store) Dashboard() (string, error) {
-	body, err := s.Overview("")
+func (s *Store) Dashboard(domain string) (string, error) {
+	if domain != "" && domain != "home" && domain != "work" && domain != "unknown" {
+		return "", fmt.Errorf("invalid domain %q", domain)
+	}
+	body, err := s.Overview(domain)
 	if err != nil {
 		return "", err
 	}

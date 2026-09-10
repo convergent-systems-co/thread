@@ -24,7 +24,7 @@ thread checkpoint --project atlas
 thread status --domain home
 thread set --id RECORD_ID --status paused --next 'Run the integration test'
 thread link --from RECORD_ID --to OTHER_RECORD_ID
-thread dashboard
+thread dashboard [--domain home|work|unknown]
 thread hook --provider claude --event session-start < hook-payload.json
 thread extract --repo /path/to/heimdall/projects --source heimdall --domain home
 thread skill install --client all
@@ -102,7 +102,7 @@ Edit item `status`, `next`, `tags`, `related`, and other properties directly in 
 
 Creation flushes a temporary file before exclusive publication. CLI updates take a per-note local lock, preserve original bytes in `.history`, and detect external changes before replacement. A lock file left by a crash is surfaced for inspection, never silently broken. These controls do not implement distributed locking across iCloud devices. Avoid simultaneous edits of the same note; duplicate IDs and malformed Markdown raise errors rather than silently hiding data. Symlinks in managed storage are rejected. Keep independent vault backups and let iCloud finish syncing before switching devices.
 
-`Overview.md` is generated; it is replaced only if its ownership marker is present. Other user-owned notes are not rendered over. The selected vault's mobile location and actual iCloud propagation must be checked on the user's devices; local writes do not prove phone sync.
+`Overview.md` is generated; it is replaced only if its ownership marker is present. `thread dashboard` refreshes that Markdown file and prints its path; it does not open Obsidian. Add `--domain home`, `--domain work`, or `--domain unknown` to generate a filtered view. Other user-owned notes are not rendered over. The selected vault's mobile location and actual iCloud propagation must be checked on the user's devices; local writes do not prove phone sync.
 
 ## Companion skill
 

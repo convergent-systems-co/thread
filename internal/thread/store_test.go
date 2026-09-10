@@ -169,7 +169,42 @@ func TestInitPreservesExistingAndDashboardOwnership(t *testing.T) {
 	}
 	overview := filepath.Join(s.Root, "Thread/Overview.md")
 	os.WriteFile(overview, []byte("my own page"), 0600)
-	if _, err := s.Dashboard(); err == nil {
+	if _, err := s.Dashboard(""); err == nil {
 		t.Fatal("overwrote user overview")
+	}
+}
+
+func TestDashboardFiltersDomain(t *testing.T) {
+	s := testStore(t)
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct {
+		title  string
+		domain string
+	}{
+		{"Home work", "home"},
+		{"Work work", "work"},
+	} {
+		n := NewNote("action", item.title)
+		n.Domain = item.domain
+		n.Status = "active"
+		n.Next = "Continue"
+		if _, err := s.New(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Dashboard("home"); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(s.Root, "Thread", "Overview.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "Home work") || strings.Contains(string(body), "Work work") {
+		t.Fatalf("dashboard did not filter domain: %s", body)
+	}
+	if _, err := s.Dashboard("other"); err == nil {
+		t.Fatal("accepted invalid dashboard domain")
 	}
 }
