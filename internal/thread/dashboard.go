@@ -11,33 +11,63 @@ import (
 
 const bases = `filters:
   and:
-    - 'file.inFolder("Thread/.items") || file.inFolder("Thread/Projects")'
+    - 'file.inFolder("Thread")'
+    - '!file.inFolder("Thread/.items")'
+    - '!file.inFolder("Thread/.runs")'
+    - '!file.inFolder("Thread/.events")'
+    - '!file.inFolder("Thread/.history")'
     - 'thread_schema == 1'
 views:
   - type: table
-    name: Resume work
+    name: Projects
+    filters:
+      and:
+        - 'kind == "project"'
+    order: [title, status, domain, updated]
+  - type: table
+    name: Todos
     filters:
       and:
         - 'status == "active" || status == "paused" || status == "blocked"'
+        - 'kind != "project" && kind != "run" && kind != "event" && kind != "checkpoint"'
     order: [title, project, status, next, domain, updated]
+  - type: table
+    name: Memories / Unassigned
+    filters:
+      and:
+        - 'kind == "memory"'
+        - 'project == null'
+    order: [title, source, domain, created]
+  - type: table
+    name: Decisions
+    filters:
+      and:
+        - 'kind == "decision"'
+    order: [title, project, related, updated]
+  - type: table
+    name: Discoveries
+    filters:
+      and:
+        - 'kind == "discovery"'
+    order: [title, project, related, updated]
+  - type: table
+    name: Sessions
+    filters:
+      and:
+        - 'kind == "session"'
+    order: [title, project, created, updated]
   - type: table
     name: Inbox and suggestions
     filters:
       and:
         - 'status == "inbox" || status == "suggested"'
     order: [title, kind, project, source, domain, created]
-  - type: table
-    name: Decisions and memory
-    filters:
-      and:
-        - 'kind == "decision" || kind == "memory" || kind == "habit" || kind == "discovery"'
-    order: [title, kind, project, related, updated]
 `
 
 func (s *Store) Init() error {
 	content := map[string]string{
 		"Thread/Thread.base":   bases,
-		"Thread/Start Here.md": "# Thread\n\nA place to put work down and pick it up again.\n\n![[Thread/Thread.base]]\n\n[[Thread/Overview|Latest overview]] · [[Thread/Guide|How Thread works]]\n",
+		"Thread/Start Here.md": "# Thread\n\nA place to put work down and pick it up again.\n\n![[Thread/Thread.base]]\n\n## Start here\n\n- [[Thread/Projects|Projects]]\n- [[Thread/Overview#Work to resume|Todos]]\n- [[Thread/Overview#Memories / Unassigned|Memories / Unassigned]]\n- [[Thread/Overview#Decisions|Decisions]]\n- [[Thread/Overview#Discoveries|Discoveries]]\n- [[Thread/Overview#Project session history|Sessions]]\n\n[[Thread/Overview|Latest overview]] · [[Thread/Guide|How Thread works]]\n",
 		"Thread/Guide.md":      "# Using Thread\n\nCapture first; organize later. Edit item properties in Obsidian: `status`, `next`, `tags`, `related`, and `domain`. CLI updates preserve extra properties and body text.\n\nStatuses: inbox, suggested, active, paused, blocked, done, archived. Suggestions are not commitments. Set one concrete `next` action on active work.\n\nEach item links to its project. Use `related` links for dependencies and shared ideas; explain the relationship in the note body. The graph follows these links.\n\n`.items/` and `.runs/` are Thread-managed storage. `.items/` contains captures, sessions, and recovery records; `.runs/` contains immutable execution observations. Do not move, rename, or reorganize files there manually. Humans may correct item properties when needed; use the CLI for lifecycle changes.\n\nRun observations are immutable snapshots from develop/Praxis. Thread does not advance their execution state. The generated Overview is refreshed by `thread dashboard [--domain home|work|unknown]`; the command writes the Markdown view and does not open Obsidian. Human-facing work views live in Start Here, Overview, Thread.base, and project notes.\n\nCLI edits keep prior note versions in `Thread/.history`. This is local note history, not a separate backup or code protection. Avoid editing the same note simultaneously on multiple machines: iCloud is eventually consistent. Duplicate IDs and malformed notes are surfaced as errors.\n\nUse `thread snapshot --repo PATH` for a verified local working-file ZIP and `thread organize --id ID` for optional headless Claude classification. Automatic hooks, live sessions, and background polling are not enabled in this release. Unknown metrics are not zero, and session duration is not human working time.\n",
 	}
 	for rel, body := range content {
@@ -48,6 +78,13 @@ func (s *Store) Init() error {
 		if err = s.create(p, []byte(body)); err != nil && !os.IsExist(err) {
 			return err
 		}
+	}
+	projects, err := s.path("Thread/Projects")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(projects, 0700); err != nil {
+		return err
 	}
 	return nil
 }
