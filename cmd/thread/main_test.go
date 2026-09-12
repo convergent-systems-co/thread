@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -63,6 +64,9 @@ func TestInitAndDashboardReportGeneratedPath(t *testing.T) {
 }
 
 func TestDashboardReportsPartialVaultWarning(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("dataless iCloud placeholders are a macOS FileProvider behavior")
+	}
 	vault := t.TempDir()
 	var out bytes.Buffer
 	if err := run([]string{"--vault", vault, "init"}, strings.NewReader(""), &out); err != nil {
