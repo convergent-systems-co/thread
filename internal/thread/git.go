@@ -74,7 +74,7 @@ func (s *Store) ResolveProject(id, repo string) (Note, error) {
 	if err != nil {
 		return Note{}, err
 	}
-	notes, err := s.Notes()
+	notes, err := s.projectNotes()
 	if err != nil {
 		return Note{}, err
 	}

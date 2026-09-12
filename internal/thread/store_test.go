@@ -1,11 +1,14 @@
 package thread
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func testStore(t *testing.T) *Store {
@@ -125,6 +128,58 @@ func TestCorruptionAndConflictsAreVisible(t *testing.T) {
 	os.WriteFile(p, []byte("broken"), 0600)
 	if _, err := s2.Notes(); err == nil {
 		t.Fatal("corrupt note hidden")
+	}
+}
+
+func TestVaultReadsHaveOneBoundedDeadline(t *testing.T) {
+	s := testStore(t)
+	n := NewNote("capture", "Blocking record")
+	if _, err := s.New(n); err != nil {
+		t.Fatal(err)
+	}
+	originalRead, originalTimeout := readVaultFile, vaultReadTimeout
+	blocked := make(chan struct{})
+	readVaultFile = func(path string) ([]byte, error) {
+		<-blocked
+		return originalRead(path)
+	}
+	vaultReadTimeout = 25 * time.Millisecond
+	t.Cleanup(func() {
+		close(blocked)
+		readVaultFile, vaultReadTimeout = originalRead, originalTimeout
+	})
+	started := time.Now()
+	_, err := s.Notes()
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) || !IsVaultUnavailable(err) {
+		t.Fatalf("expected bounded vault timeout, got %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("vault read was not bounded: %s", elapsed)
+	}
+}
+
+func TestAvailableNotesSkipDatalessFilesWithWarning(t *testing.T) {
+	s := testStore(t)
+	available := NewNote("capture", "Available")
+	missing := NewNote("capture", "Evicted")
+	if _, err := s.New(available); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.New(missing); err != nil {
+		t.Fatal(err)
+	}
+	original := datalessVaultFile
+	datalessVaultFile = func(info os.FileInfo) bool { return info.Name() == missing.ID+".md" }
+	t.Cleanup(func() { datalessVaultFile = original })
+	notes, warning, err := s.AvailableNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 1 || notes[0].ID != available.ID || warning.Skipped != 1 || len(warning.Paths) != 1 {
+		t.Fatalf("unexpected partial result: notes=%+v warning=%+v", notes, warning)
+	}
+	if _, err = s.Notes(); err == nil || !IsVaultUnavailable(err) {
+		t.Fatalf("complete read silently ignored dataless record: %v", err)
 	}
 }
 func TestRunImportIdempotentAndLatestOnly(t *testing.T) {

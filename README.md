@@ -102,6 +102,8 @@ Edit item `status`, `next`, `tags`, `related`, and other properties directly in 
 
 Creation flushes a temporary file before exclusive publication. CLI updates take a per-note local lock, preserve original bytes in `.history`, and detect external changes before replacement. A lock file left by a crash is surfaced for inspection, never silently broken. These controls do not implement distributed locking across iCloud devices. Avoid simultaneous edits of the same note; duplicate IDs and malformed Markdown raise errors rather than silently hiding data. Symlinks in managed storage are rejected. Keep independent vault backups and let iCloud finish syncing before switching devices.
 
+On macOS, an iCloud/FileProvider vault may retain filenames and sizes while evicting file content. Thread detects these dataless records before reading them. `resume` skips them, reports that its result may be incomplete, and includes a `vault_warning` in JSON output; commands that require a complete vault fail clearly. All vault scans have a five-second read deadline. Lifecycle hooks have a separate three-second deadline and fail open with a `Thread hook capture skipped` message so a sync stall cannot hold an AI client session open.
+
 `Overview.md` is generated; it is replaced only if its ownership marker is present. `thread dashboard` refreshes that Markdown file and prints its path; it does not open Obsidian. Add `--domain home`, `--domain work`, or `--domain unknown` to generate a filtered view. Other user-owned notes are not rendered over. The selected vault's mobile location and actual iCloud propagation must be checked on the user's devices; local writes do not prove phone sync.
 
 ## Companion skill

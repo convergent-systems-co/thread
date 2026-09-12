@@ -2,6 +2,7 @@ package thread
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -53,6 +54,44 @@ var statuses = map[string]bool{"inbox": true, "suggested": true, "active": true,
 
 const itemFolder = ".items"
 const runFolder = ".runs"
+
+var vaultReadTimeout = 5 * time.Second
+var readVaultFile = os.ReadFile
+var datalessVaultFile = isDatalessFile
+
+// VaultReadWarning makes an intentionally incomplete view visible to callers.
+// Paths are bounded so a heavily evicted vault does not produce unbounded output.
+type VaultReadWarning struct {
+	Skipped int      `json:"skipped"`
+	Paths   []string `json:"paths,omitempty"`
+}
+
+func (w VaultReadWarning) Error() string {
+	if w.Skipped == 1 {
+		return "1 vault record is not downloaded; skipped dataless iCloud file " + strings.Join(w.Paths, ", ")
+	}
+	return fmt.Sprintf("%d vault records are not downloaded; skipped dataless iCloud files (examples: %s)", w.Skipped, strings.Join(w.Paths, ", "))
+}
+
+type VaultReadError struct {
+	Path string
+	Err  error
+}
+
+func (e *VaultReadError) Error() string {
+	if errors.Is(e.Err, context.DeadlineExceeded) {
+		return fmt.Sprintf("vault read timed out after %s while reading %s; synced content may not be downloaded", vaultReadTimeout, e.Path)
+	}
+	return fmt.Sprintf("vault record unavailable at %s: %v", e.Path, e.Err)
+}
+
+func (e *VaultReadError) Unwrap() error { return e.Err }
+
+func IsVaultUnavailable(err error) bool {
+	var readErr *VaultReadError
+	var warning VaultReadWarning
+	return errors.As(err, &readErr) || errors.As(err, &warning)
+}
 
 func Now() string     { return time.Now().UTC().Format(time.RFC3339Nano) }
 func Machine() string { h, _ := os.Hostname(); return h }
@@ -220,15 +259,37 @@ func syncDir(path string) error {
 	defer f.Close()
 	return f.Sync()
 }
-func (s *Store) Notes() ([]Note, error) {
+func readFileBefore(ctx context.Context, path string) ([]byte, error) {
+	reader := readVaultFile
+	result := make(chan struct {
+		data []byte
+		err  error
+	}, 1)
+	go func() {
+		data, err := reader(path)
+		result <- struct {
+			data []byte
+			err  error
+		}{data, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case got := <-result:
+		return got.data, got.err
+	}
+}
+
+func (s *Store) notesIn(dirs []string, allowDataless bool) ([]Note, VaultReadWarning, error) {
 	var notes []Note
+	var warning VaultReadWarning
 	seen := map[string]bool{}
-	// Keep reading the pre-.items location during upgrades. New records always
-	// publish to .items, while existing vaults can migrate without downtime.
-	for _, dir := range []string{"Projects", itemFolder, "Items", runFolder, "Runs", eventFolder} {
+	ctx, cancel := context.WithTimeout(context.Background(), vaultReadTimeout)
+	defer cancel()
+	for _, dir := range dirs {
 		p, err := s.path(filepath.Join("Thread", dir))
 		if err != nil {
-			return nil, err
+			return nil, warning, err
 		}
 		err = filepath.WalkDir(p, func(path string, d fs.DirEntry, err error) error {
 			if os.IsNotExist(err) && path == p {
@@ -243,9 +304,26 @@ func (s *Store) Notes() ([]Note, error) {
 			if d.IsDir() || !strings.HasSuffix(path, ".md") {
 				return nil
 			}
-			b, err := os.ReadFile(path)
+			info, err := d.Info()
 			if err != nil {
 				return err
+			}
+			if datalessVaultFile(info) {
+				warning.Skipped++
+				if len(warning.Paths) < 3 {
+					rel, relErr := filepath.Rel(s.Root, path)
+					if relErr == nil {
+						warning.Paths = append(warning.Paths, filepath.ToSlash(rel))
+					}
+				}
+				if allowDataless {
+					return nil
+				}
+				return warning
+			}
+			b, err := readFileBefore(ctx, path)
+			if err != nil {
+				return &VaultReadError{Path: path, Err: err}
 			}
 			n, err := Decode(b)
 			if err != nil {
@@ -260,7 +338,7 @@ func (s *Store) Notes() ([]Note, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, warning, err
 		}
 	}
 	sort.Slice(notes, func(i, j int) bool {
@@ -268,7 +346,25 @@ func (s *Store) Notes() ([]Note, error) {
 		b, _ := time.Parse(time.RFC3339Nano, notes[j].Updated)
 		return a.After(b)
 	})
-	return notes, nil
+	return notes, warning, nil
+}
+
+// Notes returns a complete view or an explicit error. It never silently hides
+// records that are present in the vault but unavailable locally.
+func (s *Store) Notes() ([]Note, error) {
+	notes, _, err := s.notesIn([]string{"Projects", itemFolder, "Items", runFolder, "Runs", eventFolder}, false)
+	return notes, err
+}
+
+// AvailableNotes is for human-facing, read-only views that can safely present
+// partial results as long as they also present the warning.
+func (s *Store) AvailableNotes() ([]Note, VaultReadWarning, error) {
+	return s.notesIn([]string{"Projects", itemFolder, "Items", runFolder, "Runs", eventFolder}, true)
+}
+
+func (s *Store) projectNotes() ([]Note, error) {
+	notes, _, err := s.notesIn([]string{"Projects"}, false)
+	return notes, err
 }
 func (s *Store) Find(id string) (Note, error) {
 	ns, err := s.Notes()
@@ -297,14 +393,19 @@ func SameLink(a, b string) bool {
 	return target(a) == target(b)
 }
 func (s *Store) Project(id string) (Note, error) {
-	n, err := s.Find(id)
+	notes, err := s.projectNotes()
 	if err != nil {
-		return n, err
+		return Note{}, err
 	}
-	if n.Kind != "project" {
-		return n, errors.New("record is not a project")
+	for _, n := range notes {
+		if n.ID == id {
+			if n.Kind != "project" {
+				return n, errors.New("record is not a project")
+			}
+			return n, nil
+		}
 	}
-	return n, nil
+	return Note{}, fmt.Errorf("record %q not found", id)
 }
 func (s *Store) Update(id string, change func(*Note) error) error {
 	n, err := s.Find(id)

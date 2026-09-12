@@ -6,7 +6,35 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+var hookDeadline = 3 * time.Second
+
+// RunHookBounded keeps editor lifecycle hooks fail-open. A stalled vault may
+// lose this observation, but it cannot stall the client session indefinitely.
+func RunHookBounded(capture func() (string, error)) (output, skipped string, err error) {
+	type result struct {
+		output string
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		value, captureErr := capture()
+		done <- result{output: value, err: captureErr}
+	}()
+	timer := time.NewTimer(hookDeadline)
+	defer timer.Stop()
+	select {
+	case got := <-done:
+		if IsVaultUnavailable(got.err) {
+			return "", got.err.Error(), nil
+		}
+		return got.output, "", got.err
+	case <-timer.C:
+		return "", fmt.Sprintf("vault operation exceeded %s", hookDeadline), nil
+	}
+}
 
 // ClaudeHookEvent is the stable subset of Claude Code hook payloads Thread
 // needs. Unknown fields are intentionally ignored for forward compatibility.

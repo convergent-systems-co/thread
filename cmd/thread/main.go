@@ -403,7 +403,13 @@ func run(args []string, in io.Reader, out io.Writer) error {
 			return errors.New("hook payload exceeds 4 MiB")
 		}
 		if *provider == "codex" {
-			brief, err := s.HandleCodexHook(data, *eventName)
+			brief, skipped, err := core.RunHookBounded(func() (string, error) {
+				return s.HandleCodexHook(data, *eventName)
+			})
+			if skipped != "" {
+				fmt.Fprintln(out, "Thread hook capture skipped:", skipped)
+				return nil
+			}
 			if err == nil && brief != "" {
 				fmt.Fprint(out, brief)
 			}
@@ -416,7 +422,13 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		if e.HookEventName == "" {
 			e.HookEventName = *eventName
 		}
-		p, err := s.HandleClaudeHook(e)
+		p, skipped, err := core.RunHookBounded(func() (string, error) {
+			return s.HandleClaudeHook(e)
+		})
+		if skipped != "" {
+			fmt.Fprintln(out, "Thread hook capture skipped:", skipped)
+			return nil
+		}
 		if err == nil {
 			fmt.Fprintln(out, p)
 		}
@@ -460,7 +472,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		if registered.Common != g.Common {
 			return errors.New("selected repository does not match the project")
 		}
-		notes, err := s.Notes()
+		notes, warning, err := s.AvailableNotes()
 		if err != nil {
 			return err
 		}
@@ -477,7 +489,14 @@ func run(args []string, in io.Reader, out io.Writer) error {
 			}
 		}
 		if *asJSON {
-			return json.NewEncoder(out).Encode(map[string]any{"project": p, "git": g, "items": items, "runs": runs})
+			result := map[string]any{"project": p, "git": g, "items": items, "runs": runs}
+			if warning.Skipped > 0 {
+				result["vault_warning"] = warning
+			}
+			return json.NewEncoder(out).Encode(result)
+		}
+		if warning.Skipped > 0 {
+			fmt.Fprintf(out, "Warning: %s. Results below may be incomplete.\n\n", warning.Error())
 		}
 		fmt.Fprintf(out, "%s · %s · %s\n%s\nBranch: %s · HEAD: %s\n\n", p.Title, p.Domain, core.Machine(), g.Root, g.Branch, g.Head)
 		if g.Changes != "" {
