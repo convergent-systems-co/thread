@@ -20,3 +20,16 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Notify Homebrew tap
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN is required to update convergent-systems-co/homebrew-tap" >&2
+            exit 1
+          fi
+          gh api repos/convergent-systems-co/homebrew-tap/dispatches \
+            --method POST \
+            -f event_type=thread-release \
+            -F "client_payload[version]=${GITHUB_REF_NAME}"

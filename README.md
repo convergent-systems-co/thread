@@ -132,4 +132,6 @@ go test -race ./...
 go vet ./...
 ```
 
+Tagged releases notify `convergent-systems-co/homebrew-tap` after GoReleaser publishes every artifact. Configure the Thread repository Actions secret `HOMEBREW_TAP_TOKEN` with a fine-grained GitHub token that has Contents read/write access to the tap repository; the release workflow fails visibly if this credential is missing instead of silently leaving Homebrew stale.
+
 Tests cover concurrent capture, duplicate creation, user-content preservation, note history, malformed/conflicting records, path escapes, idempotent imports, metrics aggregation, source status names, unsupported AI claims, provider failure, and recovery of uncommitted/untracked bytes without changing Git state.
