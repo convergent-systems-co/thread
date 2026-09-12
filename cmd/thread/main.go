@@ -189,9 +189,12 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		if err = s.Init(); err != nil {
 			return err
 		}
-		p, err := s.Dashboard("")
+		result, err := s.Dashboard("")
 		if err == nil {
-			fmt.Fprintln(out, p)
+			fmt.Fprintln(out, result.Path)
+			if result.Warning.Skipped > 0 {
+				fmt.Fprintf(out, "Warning: %s. Results below may be incomplete.\n", result.Warning)
+			}
 		}
 		return err
 	case "extract":
@@ -349,9 +352,12 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		return err
 	case "dashboard":
-		p, err := s.Dashboard(*domain)
+		result, err := s.Dashboard(*domain)
 		if err == nil {
-			fmt.Fprintf(out, "Updated Thread dashboard: %s\n", p)
+			fmt.Fprintf(out, "Updated Thread dashboard: %s\n", result.Path)
+			if result.Warning.Skipped > 0 {
+				fmt.Fprintf(out, "Warning: %s. Results below may be incomplete.\n", result.Warning)
+			}
 		}
 		return err
 	case "snapshot":
