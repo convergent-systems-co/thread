@@ -229,6 +229,68 @@ func TestInitPreservesExistingAndDashboardOwnership(t *testing.T) {
 	}
 }
 
+func TestInitCreatesSafeDiscoverableVaultEntryPoints(t *testing.T) {
+	s := testStore(t)
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	entryPoints := map[string][]string{
+		"Start Here.md": {"Projects", "Todos", "Memories", "Decisions", "Discoveries", "Sessions"},
+		"Thread.base":   {"name: Projects", "name: Todos", "name: Memories / Unassigned", "name: Decisions", "name: Discoveries", "name: Sessions"},
+	}
+	for name, wants := range entryPoints {
+		body, err := os.ReadFile(filepath.Join(s.Root, "Thread", name))
+		if err != nil {
+			t.Fatalf("init did not create %s: %v", name, err)
+		}
+		text := string(body)
+		for _, want := range wants {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s does not define discoverable %q entry point:\n%s", name, want, text)
+			}
+		}
+		if name == "Start Here.md" && strings.Contains(text, "Thread/.") {
+			t.Errorf("%s exposes a managed dot-directory in a human-facing navigation surface:\n%s", name, text)
+		}
+	}
+	base, err := os.ReadFile(filepath.Join(s.Root, "Thread", "Thread.base"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, folder := range []string{".items", ".runs", ".events", ".history"} {
+		filter := `!file.inFolder("Thread/` + folder + `")`
+		if !strings.Contains(string(base), filter) {
+			t.Errorf("Thread.base does not exclude managed storage %q:\n%s", folder, base)
+		}
+	}
+	projects := filepath.Join(s.Root, "Thread", "Projects")
+	info, err := os.Stat(projects)
+	if err != nil {
+		t.Fatalf("init did not create Projects directory: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("Projects entry point is not a directory: %s", projects)
+	}
+	for _, rel := range []string{"Start Here.md", "Overview.md"} {
+		if rel == "Overview.md" {
+			if _, err := s.Dashboard(""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		body, err := os.ReadFile(filepath.Join(s.Root, "Thread", rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(body), "[[Thread/Projects|Projects]]") {
+			t.Errorf("%s does not link Projects to its directory:\n%s", rel, body)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.Root, "Thread", "Guide.md")); err != nil {
+		t.Fatalf("init did not create Guide.md: %v", err)
+	}
+}
+
 func TestDashboardFiltersDomain(t *testing.T) {
 	s := testStore(t)
 	if err := s.Init(); err != nil {
