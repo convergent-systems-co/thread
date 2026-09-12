@@ -2,9 +2,11 @@ package thread
 
 import (
 	"encoding/json"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestClaudeHookSessionIsIdempotentAndLeavesBoundedResumeContext(t *testing.T) {
@@ -113,5 +115,33 @@ func TestHookConfigExampleUsesAbsoluteBinary(t *testing.T) {
 	s := HookConfigExample("/Users/test/.local/bin/thread")
 	if !filepath.IsAbs("/Users/test/.local/bin/thread") || len(s) == 0 {
 		t.Fatal("bad config")
+	}
+}
+
+func TestHookVaultFailureDegradesWithoutFailingCaller(t *testing.T) {
+	output, skipped, err := RunHookBounded(func() (string, error) {
+		return "", &VaultReadError{Path: "Thread/.items/remote.md", Err: errors.New("not downloaded")}
+	})
+	if err != nil || output != "" || skipped == "" {
+		t.Fatalf("hook did not degrade: output=%q skipped=%q err=%v", output, skipped, err)
+	}
+}
+
+func TestHookDeadlineIsBounded(t *testing.T) {
+	old := hookDeadline
+	hookDeadline = 25 * time.Millisecond
+	t.Cleanup(func() { hookDeadline = old })
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	started := time.Now()
+	_, skipped, err := RunHookBounded(func() (string, error) {
+		<-release
+		return "late", nil
+	})
+	if err != nil || skipped == "" {
+		t.Fatalf("hook deadline did not degrade: skipped=%q err=%v", skipped, err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("hook did not return promptly: %s", elapsed)
 	}
 }
