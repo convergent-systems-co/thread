@@ -272,18 +272,12 @@ func TestInitCreatesSafeDiscoverableVaultEntryPoints(t *testing.T) {
 	if !info.IsDir() {
 		t.Fatalf("Projects entry point is not a directory: %s", projects)
 	}
-	for _, rel := range []string{"Start Here.md", "Overview.md"} {
-		if rel == "Overview.md" {
-			if _, err := s.Dashboard(""); err != nil {
-				t.Fatal(err)
-			}
-		}
-		body, err := os.ReadFile(filepath.Join(s.Root, "Thread", rel))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(string(body), "[[Thread/Projects|Projects]]") {
-			t.Errorf("%s does not link Projects to its directory:\n%s", rel, body)
+	if _, err := s.Dashboard(""); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"Thread/Dashboards/Projects.md", "Thread/Dashboards/Todos.md", "Thread/Dashboards/Sessions.md"} {
+		if _, err := os.Stat(filepath.Join(s.Root, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("dashboard did not create %s: %v", rel, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(s.Root, "Thread", "Guide.md")); err != nil {
@@ -314,7 +308,7 @@ func TestDashboardFiltersDomain(t *testing.T) {
 	if _, err := s.Dashboard("home"); err != nil {
 		t.Fatal(err)
 	}
-	body, err := os.ReadFile(filepath.Join(s.Root, "Thread", "Overview.md"))
+	body, err := os.ReadFile(filepath.Join(s.Root, "Thread", "Dashboards", "Todos.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

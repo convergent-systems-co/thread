@@ -25,7 +25,7 @@ Use `thread set --id ID --status STATE --next TEXT` to update an existing item; 
 
 ## Leave a useful stopping point
 
-Before ending a meaningful registered-project work session, record what changed, exact worktree/branch, what was actually verified, what remains uncertain, and one concrete next action. Include source paths or run references. Use a memory note and update the relevant action. Do not claim memory was written unless the CLI succeeded. Refresh the overview with `thread dashboard` after meaningful changes.
+Before ending a meaningful registered-project work session, record what changed, exact worktree/branch, what was actually verified, what remains uncertain, and one concrete next action. Include source paths or run references. Use a memory note and update the relevant action. Do not claim memory was written unless the CLI succeeded. Reset Thread-owned dashboards with `thread dashboard` after meaningful changes.
 
 When preserving working files is within the user's authorized scope, `thread snapshot --repo PATH --project ID` makes a verified local ZIP and records its location. Its scope is tracked/nonignored untracked regular working files only; it excludes Git history/index, ignored files, unsaved buffers, symlinks, and submodules. Pause concurrent writers for consistency. Report this precise scope and never call a Git status check a backup. `thread verify --file ZIP` verifies archived bytes; restore into a new directory, not over an existing checkout.
 

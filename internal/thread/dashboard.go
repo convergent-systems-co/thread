@@ -2,6 +2,7 @@ package thread
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +10,8 @@ import (
 	"time"
 )
 
+// Bases intentionally excludes Thread's implementation folders. Obsidian's
+// Graph filter remains a user workspace preference, which Thread must not own.
 const bases = `filters:
   and:
     - 'file.inFolder("Thread")'
@@ -20,55 +23,37 @@ const bases = `filters:
 views:
   - type: table
     name: Projects
-    filters:
-      and:
-        - 'kind == "project"'
+    filters: {and: ['kind == "project"']}
     order: [title, status, domain, updated]
   - type: table
     name: Todos
-    filters:
-      and:
-        - 'status == "active" || status == "paused" || status == "blocked"'
-        - 'kind != "project" && kind != "run" && kind != "event" && kind != "checkpoint"'
-    order: [title, project, status, next, domain, updated]
+    filters: {and: ['status == "active" || status == "paused" || status == "blocked"', 'kind != "project" && kind != "run" && kind != "event" && kind != "checkpoint"']}
+    order: [title, project, status, next, updated]
   - type: table
     name: Memories / Unassigned
-    filters:
-      and:
-        - 'kind == "memory"'
-        - 'project == null'
-    order: [title, source, domain, created]
+    filters: {and: ['kind == "memory"', 'project == null']}
+    order: [title, source, created]
   - type: table
     name: Decisions
-    filters:
-      and:
-        - 'kind == "decision"'
-    order: [title, project, related, updated]
+    filters: {and: ['kind == "decision"']}
+    order: [title, project, updated]
   - type: table
     name: Discoveries
-    filters:
-      and:
-        - 'kind == "discovery"'
-    order: [title, project, related, updated]
+    filters: {and: ['kind == "discovery"']}
+    order: [title, project, updated]
   - type: table
     name: Sessions
-    filters:
-      and:
-        - 'kind == "session"'
+    filters: {and: ['kind == "session"']}
     order: [title, project, created, updated]
-  - type: table
-    name: Inbox and suggestions
-    filters:
-      and:
-        - 'status == "inbox" || status == "suggested"'
-    order: [title, kind, project, source, domain, created]
 `
+
+const generatedMarker = "<!-- thread-generated-dashboard -->\n"
 
 func (s *Store) Init() error {
 	content := map[string]string{
 		"Thread/Thread.base":   bases,
-		"Thread/Start Here.md": "# Thread\n\nA place to put work down and pick it up again.\n\n![[Thread/Thread.base]]\n\n## Start here\n\n- [[Thread/Projects|Projects]]\n- [[Thread/Overview#Work to resume|Todos]]\n- [[Thread/Overview#Memories / Unassigned|Memories / Unassigned]]\n- [[Thread/Overview#Decisions|Decisions]]\n- [[Thread/Overview#Discoveries|Discoveries]]\n- [[Thread/Overview#Project session history|Sessions]]\n\n[[Thread/Overview|Latest overview]] · [[Thread/Guide|How Thread works]]\n",
-		"Thread/Guide.md":      "# Using Thread\n\nCapture first; organize later. Edit item properties in Obsidian: `status`, `next`, `tags`, `related`, and `domain`. CLI updates preserve extra properties and body text.\n\nStatuses: inbox, suggested, active, paused, blocked, done, archived. Suggestions are not commitments. Set one concrete `next` action on active work.\n\nEach item links to its project. Use `related` links for dependencies and shared ideas; explain the relationship in the note body. The graph follows these links.\n\n`.items/` and `.runs/` are Thread-managed storage. `.items/` contains captures, sessions, and recovery records; `.runs/` contains immutable execution observations. Do not move, rename, or reorganize files there manually. Humans may correct item properties when needed; use the CLI for lifecycle changes.\n\nRun observations are immutable snapshots from develop/Praxis. Thread does not advance their execution state. The generated Overview is refreshed by `thread dashboard [--domain home|work|unknown]`; the command writes the Markdown view and does not open Obsidian. Human-facing work views live in Start Here, Overview, Thread.base, and project notes.\n\nCLI edits keep prior note versions in `Thread/.history`. This is local note history, not a separate backup or code protection. Avoid editing the same note simultaneously on multiple machines: iCloud is eventually consistent. Duplicate IDs and malformed notes are surfaced as errors.\n\nUse `thread snapshot --repo PATH` for a verified local working-file ZIP and `thread organize --id ID` for optional headless Claude classification. Automatic hooks, live sessions, and background polling are not enabled in this release. Unknown metrics are not zero, and session duration is not human working time.\n",
+		"Thread/Start Here.md": "# Thread\n\nA place to put work down and pick it up again.\n\n![[Thread/Thread.base]]\n\n## Dashboards\n\n- [[Thread/Dashboards/Projects|Projects]]\n- [[Thread/Dashboards/Todos|Todos]]\n- [[Thread/Dashboards/Memories|Memories / Unassigned]]\n- [[Thread/Dashboards/Decisions|Decisions]]\n- [[Thread/Dashboards/Discoveries|Discoveries]]\n- [[Thread/Dashboards/Sessions|Sessions]]\n\n[[Thread/Overview|Dashboard home]] · [[Thread/Guide|How Thread works]]\n",
+		"Thread/Guide.md":      "# Using Thread\n\nCapture first; organize later. Edit item properties in Obsidian: `status`, `next`, `tags`, `related`, and `domain`. CLI updates preserve extra properties and body text.\n\n`thread dashboard` resets Thread-owned dashboard pages: the dashboard home, category pages, each project dashboard, and date-based session summaries. It never replaces project notes or other user-owned pages.\n\nOpen [[Thread/Dashboards/Graph|Graph setup]] once to hide Thread's dot-prefixed implementation folders in Obsidian's Graph view. That preference belongs to Obsidian, so Thread does not overwrite your vault settings.\n\n`.items/`, `.runs/`, `.events/`, and `.history/` are Thread-managed storage. Do not move or rename files there manually.\n",
 	}
 	for rel, body := range content {
 		p, err := s.path(rel)
@@ -79,195 +64,30 @@ func (s *Store) Init() error {
 			return err
 		}
 	}
-	projects, err := s.path("Thread/Projects")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(projects, 0700); err != nil {
-		return err
+	for _, rel := range []string{"Thread/Projects", "Thread/Dashboards"} {
+		p, err := s.path(rel)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(p, 0700); err != nil {
+			return err
+		}
 	}
 	return nil
 }
+
 func (s *Store) Overview(domain string) (string, error) {
 	notes, err := s.Notes()
 	if err != nil {
 		return "", err
 	}
-	return s.renderOverview(notes, domain, VaultReadWarning{}), nil
-}
-
-func (s *Store) renderOverview(notes []Note, domain string, warning VaultReadWarning) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# Thread overview\n\nGenerated %s. Source observations may be older.\n\n", Now())
-	filter := func(n Note) bool { return domain == "" || n.Domain == domain }
-	if warning.Skipped > 0 {
-		fmt.Fprintf(&b, "> [!warning] Partial vault view\n> %s\n\n", warning.Error())
-	}
-	b.WriteString("## Navigation\n\n- [[Thread/Projects|Projects]]\n- [[Thread/Overview#Work to resume|Todos]]\n- [[Thread/Overview#Memories / Unassigned|Memories]]\n- [[Thread/Overview#Decisions|Decisions]]\n- [[Thread/Overview#Discoveries|Discoveries]]\n- [[Thread/Overview#Project session history|Sessions]]\n\n")
-	b.WriteString("## Projects\n\n")
-	projects := make([]Note, 0)
-	for _, n := range notes {
-		if n.Kind == "project" && filter(n) {
-			projects = append(projects, n)
-		}
-	}
-	sort.Slice(projects, func(i, j int) bool { return projects[i].ID < projects[j].ID })
-	if len(projects) == 0 {
-		b.WriteString("No selected projects recorded yet.\n")
-	} else {
-		for _, project := range projects {
-			fmt.Fprintf(&b, "- %s\n", s.dashboardLink(project))
-		}
-	}
-	b.WriteString("\n## Project session history\n\n")
-	b.WriteString("Generic session notes use their recorded `created` timestamp. Lifecycle-event evidence uses its recorded `occurred_at` timestamp.\n\n")
-	for _, project := range projects {
-		fmt.Fprintf(&b, "### %s\n\n", s.dashboardLink(project))
-		s.renderProjectSessions(&b, project, notes, filter)
-	}
-	if len(projects) == 0 {
-		b.WriteString("No project session evidence recorded yet.\n")
-	}
-	b.WriteString("\n## Memories / Unassigned\n\n")
-	memories := make([]Note, 0)
-	for _, n := range notes {
-		if filter(n) && n.Kind == "memory" && n.Project == "" {
-			memories = append(memories, n)
-		}
-	}
-	sort.Slice(memories, func(i, j int) bool { return memories[i].ID < memories[j].ID })
-	if len(memories) == 0 {
-		b.WriteString("No unassigned memories recorded yet.\n")
-	} else {
-		for _, memory := range memories {
-			fmt.Fprintf(&b, "- %s\n", s.dashboardLink(memory))
-		}
-	}
-	b.WriteString("\n## Decisions\n\n")
-	s.renderCategory(&b, notes, filter, "decision")
-	b.WriteString("\n## Discoveries\n\n")
-	s.renderCategory(&b, notes, filter, "discovery")
-	b.WriteString("## Work to resume\n\n")
-	count := 0
-	for _, n := range notes {
-		if !filter(n) || n.Kind == "run" || n.Kind == "event" || n.Kind == "checkpoint" || n.Kind == "project" || n.Status == "done" || n.Status == "archived" || n.Status == "inbox" || n.Status == "suggested" {
-			continue
-		}
-		count++
-		fmt.Fprintf(&b, "- %s — %s; next: %s\n", s.dashboardLink(n), n.Status, defaultText(n.Next, "not recorded"))
-	}
-	if count == 0 {
-		b.WriteString("No selected work recorded yet.\n")
-	}
-	b.WriteString("\n## Needs attention\n\n")
-	count = 0
-	for _, n := range notes {
-		if !filter(n) || n.Kind == "run" || n.Kind == "event" || n.Kind == "checkpoint" || n.Status == "done" || n.Status == "archived" {
-			continue
-		}
-		var reasons []string
-		if n.Status == "active" && n.Next == "" {
-			reasons = append(reasons, "missing next action")
-		}
-		if n.Status == "blocked" {
-			reasons = append(reasons, "blocked")
-		}
-		if n.Domain == "unknown" {
-			reasons = append(reasons, "work/home unassigned")
-		}
-		t, _ := time.Parse(time.RFC3339Nano, n.Updated)
-		if n.Status == "active" && time.Since(t) > 7*24*time.Hour {
-			reasons = append(reasons, "active state older than seven days")
-		}
-		if len(reasons) > 0 {
-			count++
-			fmt.Fprintf(&b, "- %s: %s.\n", s.dashboardLink(n), strings.Join(reasons, ", "))
-		}
-	}
-	if count == 0 {
-		b.WriteString("No flagged items in the recorded data.\n")
-	}
-	b.WriteString("\n## Execution observations\n\n")
-	for _, n := range LatestRuns(notes) {
-		if filter(n) {
-			fmt.Fprintf(&b, "- %s — %s; observed %s.\n", s.dashboardLink(n), n.Status, n.Updated)
-		}
-	}
-	b.WriteString("\n## Capture inbox\n\n")
-	count = 0
-	for _, n := range notes {
-		if filter(n) && n.Kind != "project" && (n.Status == "inbox" || n.Status == "suggested") {
-			count++
-			fmt.Fprintf(&b, "- %s — %s\n", s.dashboardLink(n), n.Status)
-			if count == 10 {
-				b.WriteString("\nUse the Inbox view for all captures.\n")
-				break
-			}
-		}
-	}
-	b.WriteString("\n## Measurements\n\n")
-	totals := map[string]float64{}
-	coverage := map[string]int{}
-	for _, n := range LatestRuns(notes) {
-		if !filter(n) {
-			continue
-		}
-		for k, v := range n.Metrics {
-			key := n.Source + " / " + k
-			totals[key] += v
-			coverage[key]++
-		}
-	}
-	for _, k := range sortedMetricKeys(totals) {
-		fmt.Fprintf(&b, "- %s: %.0f (reported by %d latest run snapshots).\n", k, totals[k], coverage[k])
-	}
-	b.WriteString("\nThese are recorded workflow outcomes, not a productivity score. Unreported time, tokens, cost, and human effort remain unknown.\n\n## Recorded recovery copies\n\n")
-	for _, n := range notes {
-		if filter(n) && n.Source == "thread-snapshot" {
-			fmt.Fprintf(&b, "- %s — %s; working files only; may predate current changes.\n", s.dashboardLink(n), n.Created)
-		}
-	}
-	b.WriteString("\nCurrent code protection remains unverified until compared with a recovery copy. Inspection alone never creates a backup.\n")
-	return b.String()
-}
-
-func (s *Store) renderCategory(b *strings.Builder, notes []Note, filter func(Note) bool, kind string) {
-	var category []Note
-	for _, n := range notes {
-		if filter(n) && n.Kind == kind {
-			category = append(category, n)
-		}
-	}
-	sort.Slice(category, func(i, j int) bool { return category[i].ID < category[j].ID })
-	if len(category) == 0 {
-		b.WriteString("No records yet.\n")
-		return
-	}
-	for _, n := range category {
-		fmt.Fprintf(b, "- %s\n", s.dashboardLink(n))
-	}
+	return s.renderHome(notes, domain, VaultReadWarning{}), nil
 }
 
 type sessionEvidence struct {
-	note     Note
-	occurred time.Time
-	date     string
-	summary  string
-}
-
-func (s *Store) renderProjectSessions(b *strings.Builder, project Note, notes []Note, filter func(Note) bool) {
-	evidence := projectSessionEvidence(project, notes, filter)
-	if len(evidence) == 0 {
-		b.WriteString("No session evidence recorded yet.\n\n")
-		return
-	}
-	for i, item := range evidence {
-		if i == 0 || evidence[i-1].date != item.date {
-			fmt.Fprintf(b, "#### %s\n\n", item.date)
-		}
-		fmt.Fprintf(b, "- %s — %s\n", s.dashboardLink(item.note), item.summary)
-	}
-	b.WriteByte('\n')
+	note          Note
+	occurred      time.Time
+	date, summary string
 }
 
 func projectSessionEvidence(project Note, notes []Note, filter func(Note) bool) []sessionEvidence {
@@ -278,7 +98,7 @@ func projectSessionEvidence(project Note, notes []Note, filter func(Note) bool) 
 		}
 		if n.Kind == "session" {
 			if occurred, err := time.Parse(time.RFC3339Nano, n.Created); err == nil {
-				evidence = append(evidence, sessionEvidence{note: n, occurred: occurred, date: occurred.Format("2006-01-02"), summary: noteSummary(n)})
+				evidence = append(evidence, sessionEvidence{n, occurred, occurred.Format("2006-01-02"), noteSummary(n)})
 			}
 			continue
 		}
@@ -293,7 +113,7 @@ func projectSessionEvidence(project Note, notes []Note, filter func(Note) bool) 
 		if event, err := noteEvent(n); err == nil && strings.TrimSpace(event.Text) != "" {
 			summary = strings.TrimSpace(event.Text)
 		}
-		evidence = append(evidence, sessionEvidence{note: n, occurred: occurred, date: occurred.Format("2006-01-02"), summary: summary})
+		evidence = append(evidence, sessionEvidence{n, occurred, occurred.Format("2006-01-02"), compact(summary, 240)})
 	}
 	sort.Slice(evidence, func(i, j int) bool {
 		if evidence[i].occurred.Equal(evidence[j].occurred) {
@@ -304,48 +124,173 @@ func projectSessionEvidence(project Note, notes []Note, filter func(Note) bool) 
 	return evidence
 }
 
-// dashboardLink keeps generated, graph-facing navigation out of Thread's
-// managed dot-directories. Record IDs are vault-wide unique, so Obsidian can
-// resolve them by filename while projects retain their stable public path.
 func (s *Store) dashboardLink(n Note) string {
 	if n.Kind == "project" {
 		return s.Link(n)
 	}
 	return "[[" + n.ID + "|" + strings.ReplaceAll(strings.ReplaceAll(n.Title, "|", "-"), "]", "") + "]]"
 }
-
 func (n Note) PathLink() string {
 	return "[[" + strings.TrimSuffix(filepath.ToSlash(filepath.Join("Thread", "Projects", n.ID)), ".md") + "]]"
 }
-
 func noteSummary(n Note) string {
-	if body := strings.TrimSpace(n.Body); body != "" {
-		for _, line := range strings.Split(body, "\n") {
-			if line = strings.TrimSpace(line); line != "" {
-				return line
-			}
+	for _, line := range strings.Split(strings.TrimSpace(n.Body), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return compact(line, 240)
 		}
 	}
-	return n.Title
+	return compact(n.Title, 240)
 }
-func sortedMetricKeys(m map[string]float64) []string {
-	x := map[string]any{}
-	for k := range m {
-		x[k] = nil
+func compact(text string, limit int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if len([]rune(text)) <= limit {
+		return text
 	}
-	return keys(x)
+	return string([]rune(text)[:limit-1]) + "…"
 }
-func defaultText(a, b string) string {
-	if a == "" {
-		return b
-	}
-	return a
+func sortedNotes(notes []Note) {
+	sort.Slice(notes, func(i, j int) bool {
+		if notes[i].Updated == notes[j].Updated {
+			return notes[i].ID < notes[j].ID
+		}
+		return notes[i].Updated > notes[j].Updated
+	})
+}
+func projectDashboardPath(id string) string {
+	return filepath.ToSlash(filepath.Join("Thread", "Projects", id, "Dashboard.md"))
+}
+func sessionSummaryPath(id, date string) string {
+	return filepath.ToSlash(filepath.Join("Thread", "Projects", id, "Sessions", date, "summary.md"))
+}
+func dashboardLinkForPath(path, label string) string {
+	return "[[" + strings.TrimSuffix(filepath.ToSlash(path), ".md") + "|" + label + "]]"
 }
 
-// DashboardResult identifies the generated view and any intentionally skipped
-// dataless vault records used to produce it.
+func (s *Store) renderHome(notes []Note, domain string, warning VaultReadWarning) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Thread dashboards\n\nGenerated %s. This is an index of regenerated human-facing views; source records remain unchanged.\n\n", Now())
+	if warning.Skipped > 0 {
+		fmt.Fprintf(&b, "> [!warning] Partial vault view\n> %s\n\n", warning.Error())
+	}
+	b.WriteString("## Open a dashboard\n\n- [[Thread/Dashboards/Projects|Projects]]\n- [[Thread/Dashboards/Todos|Todos]]\n- [[Thread/Dashboards/Memories|Memories / Unassigned]]\n- [[Thread/Dashboards/Decisions|Decisions]]\n- [[Thread/Dashboards/Discoveries|Discoveries]]\n- [[Thread/Dashboards/Sessions|Sessions]]\n\n## Work to resume\n\n")
+	active := filterNotes(notes, func(n Note) bool {
+		return (domain == "" || n.Domain == domain) && n.Kind != "project" && n.Kind != "run" && n.Kind != "event" && n.Kind != "checkpoint" && (n.Status == "active" || n.Status == "paused" || n.Status == "blocked")
+	})
+	if len(active) == 0 {
+		b.WriteString("No active, paused, or blocked work recorded.\n")
+	} else {
+		if len(active) > 5 {
+			active = active[:5]
+		}
+		writeNoteList(&b, active)
+	}
+	b.WriteString("\n[[Thread/Dashboards/Graph|Graph setup]]\n")
+	return b.String()
+}
+
+func filterNotes(notes []Note, fn func(Note) bool) []Note {
+	out := []Note{}
+	for _, n := range notes {
+		if fn(n) {
+			out = append(out, n)
+		}
+	}
+	sortedNotes(out)
+	return out
+}
+func writeNoteList(b *strings.Builder, notes []Note) {
+	if len(notes) == 0 {
+		b.WriteString("No records yet.\n")
+		return
+	}
+	for _, n := range notes {
+		fmt.Fprintf(b, "- %s\n", sDashboardLink(n))
+	}
+}
+func sDashboardLink(n Note) string {
+	if n.Kind == "project" {
+		return "[[Thread/Projects/" + n.ID + "|" + n.Title + "]]"
+	}
+	return "[[" + n.ID + "|" + strings.ReplaceAll(strings.ReplaceAll(n.Title, "|", "-"), "]", "") + "]]"
+}
+func (s *Store) categoryPage(title, intro string, notes []Note) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n%s\n\n", title, intro)
+	writeNoteList(&b, notes)
+	return b.String()
+}
+
+func (s *Store) renderProjects(projects []Note) string {
+	var b strings.Builder
+	b.WriteString("# Projects\n\nEach project has a generated dashboard for its active work, captured types, and dated session summaries.\n\n")
+	if len(projects) == 0 {
+		b.WriteString("No projects recorded yet.\n")
+		return b.String()
+	}
+	for _, p := range projects {
+		fmt.Fprintf(&b, "- %s — %s\n", s.dashboardLink(p), dashboardLinkForPath(projectDashboardPath(p.ID), "dashboard"))
+	}
+	return b.String()
+}
+
+func (s *Store) renderProject(project Note, notes []Note, filter func(Note) bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s dashboard\n\nProject: %s\n\n", project.Title, s.dashboardLink(project))
+	cats := []struct {
+		title string
+		notes []Note
+	}{
+		{"Todos", filterNotes(notes, func(n Note) bool {
+			return filter(n) && SameLink(n.Project, project.PathLink()) && n.Kind != "project" && n.Kind != "run" && n.Kind != "event" && n.Kind != "checkpoint" && (n.Status == "active" || n.Status == "paused" || n.Status == "blocked")
+		})},
+		{"Memories", filterNotes(notes, func(n Note) bool { return filter(n) && SameLink(n.Project, project.PathLink()) && n.Kind == "memory" })},
+		{"Decisions", filterNotes(notes, func(n Note) bool { return filter(n) && SameLink(n.Project, project.PathLink()) && n.Kind == "decision" })},
+		{"Discoveries", filterNotes(notes, func(n Note) bool {
+			return filter(n) && SameLink(n.Project, project.PathLink()) && n.Kind == "discovery"
+		})},
+	}
+	for _, c := range cats {
+		fmt.Fprintf(&b, "## %s\n\n", c.title)
+		writeNoteList(&b, c.notes)
+		b.WriteString("\n")
+	}
+	b.WriteString("## Sessions\n\n")
+	evidence := projectSessionEvidence(project, notes, filter)
+	dates := []string{}
+	seen := map[string]bool{}
+	for _, e := range evidence {
+		if !seen[e.date] {
+			seen[e.date] = true
+			dates = append(dates, e.date)
+		}
+	}
+	if len(dates) == 0 {
+		b.WriteString("No session evidence recorded yet.\n")
+	} else {
+		for _, d := range dates {
+			fmt.Fprintf(&b, "- %s\n", dashboardLinkForPath(sessionSummaryPath(project.ID, d), d))
+		}
+	}
+	return b.String()
+}
+
+func (s *Store) renderSessionSummary(project Note, date string, evidence []sessionEvidence) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s — %s\n\nProject: %s\n\nThis deterministic summary lists recorded session evidence for this date. It does not infer work that was not captured.\n\n## Evidence\n\n", project.Title, date, s.dashboardLink(project))
+	for _, e := range evidence {
+		fmt.Fprintf(&b, "- %s — %s\n", s.dashboardLink(e.note), e.summary)
+	}
+	return b.String()
+}
+
+func graphPage() string {
+	return "# Graph setup\n\nThread keeps implementation records in dot-prefixed folders. In Obsidian’s **Graph view → Filters**, add:\n\n```text\n-path:Thread/.items -path:Thread/.runs -path:Thread/.events -path:Thread/.history\n```\n\nThis is an Obsidian workspace preference, so `thread dashboard` deliberately does not edit `.obsidian` settings or overwrite your graph configuration. The generated dashboards link to source records for traceability; the filter hides those data-only nodes from the graph.\n"
+}
+
+type dashboardOutput struct{ rel, body string }
 type DashboardResult struct {
 	Path    string
+	Paths   []string
 	Warning VaultReadWarning
 }
 
@@ -357,43 +302,136 @@ func (s *Store) Dashboard(domain string) (DashboardResult, error) {
 	if err != nil {
 		return DashboardResult{}, err
 	}
-	body := s.renderOverview(notes, domain, warning)
-	p, err := s.path("Thread/Overview.md")
-	if err != nil {
+	filter := func(n Note) bool { return domain == "" || n.Domain == domain }
+	projects := filterNotes(notes, func(n Note) bool { return filter(n) && n.Kind == "project" })
+	outputs := []dashboardOutput{
+		{"Thread/Overview.md", s.renderHome(notes, domain, warning)}, {"Thread/Dashboards/Projects.md", s.renderProjects(projects)},
+		{"Thread/Dashboards/Todos.md", s.categoryPage("Todos", "Active, paused, and blocked work across projects.", filterNotes(notes, func(n Note) bool {
+			return filter(n) && n.Kind != "project" && n.Kind != "run" && n.Kind != "event" && n.Kind != "checkpoint" && (n.Status == "active" || n.Status == "paused" || n.Status == "blocked")
+		}))},
+		{"Thread/Dashboards/Memories.md", s.categoryPage("Memories / Unassigned", "Memories without a project are shown here. Project-linked memories remain on their project dashboard.", filterNotes(notes, func(n Note) bool { return filter(n) && n.Kind == "memory" && n.Project == "" }))},
+		{"Thread/Dashboards/Decisions.md", s.categoryPage("Decisions", "Recorded decisions, linked to their source records.", filterNotes(notes, func(n Note) bool { return filter(n) && n.Kind == "decision" }))},
+		{"Thread/Dashboards/Discoveries.md", s.categoryPage("Discoveries", "Recorded discoveries, linked to their source records.", filterNotes(notes, func(n Note) bool { return filter(n) && n.Kind == "discovery" }))}, {"Thread/Dashboards/Graph.md", graphPage()},
+	}
+	type projectEvidence struct {
+		project  Note
+		evidence sessionEvidence
+	}
+	all := []projectEvidence{}
+	for _, p := range projects {
+		outputs = append(outputs, dashboardOutput{projectDashboardPath(p.ID), s.renderProject(p, notes, filter)})
+		for _, e := range projectSessionEvidence(p, notes, filter) {
+			all = append(all, projectEvidence{p, e})
+		}
+	}
+	byProjectDate := map[string][]sessionEvidence{}
+	for _, x := range all {
+		byProjectDate[x.project.ID+"/"+x.evidence.date] = append(byProjectDate[x.project.ID+"/"+x.evidence.date], x.evidence)
+	}
+	var index strings.Builder
+	index.WriteString("# Sessions\n\nDated summaries are grouped under their project.\n\n")
+	if len(all) == 0 {
+		index.WriteString("No session evidence recorded yet.\n")
+	}
+	for _, p := range projects {
+		dates := []string{}
+		for key := range byProjectDate {
+			if strings.HasPrefix(key, p.ID+"/") {
+				dates = append(dates, strings.TrimPrefix(key, p.ID+"/"))
+			}
+		}
+		sort.Sort(sort.Reverse(sort.StringSlice(dates)))
+		if len(dates) > 0 {
+			fmt.Fprintf(&index, "## %s\n\n", s.dashboardLink(p))
+			for _, d := range dates {
+				fmt.Fprintf(&index, "- %s\n", dashboardLinkForPath(sessionSummaryPath(p.ID, d), d))
+				outputs = append(outputs, dashboardOutput{sessionSummaryPath(p.ID, d), s.renderSessionSummary(p, d, byProjectDate[p.ID+"/"+d])})
+			}
+			index.WriteString("\n")
+		}
+	}
+	outputs = append(outputs, dashboardOutput{"Thread/Dashboards/Sessions.md", index.String()})
+	expected, paths := map[string]bool{}, make([]string, 0, len(outputs))
+	for _, o := range outputs {
+		expected[o.rel] = true
+		p, err := s.writeDashboard(o.rel, o.body)
+		if err != nil {
+			return DashboardResult{}, err
+		}
+		paths = append(paths, p)
+	}
+	if err := s.removeStaleDashboards(expected); err != nil {
 		return DashboardResult{}, err
 	}
-	// This file is explicitly generated. User-owned notes are never rendered over.
-	const marker = "<!-- thread-generated-overview -->\n"
+	return DashboardResult{Path: paths[0], Paths: paths, Warning: warning}, nil
+}
+
+func (s *Store) writeDashboard(rel, body string) (string, error) {
+	p, err := s.path(rel)
+	if err != nil {
+		return "", err
+	}
 	old, err := os.ReadFile(p)
-	if err == nil && !strings.HasPrefix(string(old), marker) {
-		return DashboardResult{}, fmt.Errorf("%s exists without the generated marker; refusing to overwrite", p)
+	if err == nil && !dashboardOwned(rel, string(old)) {
+		return "", fmt.Errorf("%s exists without the generated marker; refusing to overwrite", p)
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return DashboardResult{}, err
+		return "", err
 	}
 	if err = os.MkdirAll(filepath.Dir(p), 0700); err != nil {
-		return DashboardResult{}, err
+		return "", err
 	}
-	f, err := os.CreateTemp(filepath.Dir(p), ".thread-overview-*")
+	f, err := os.CreateTemp(filepath.Dir(p), ".thread-dashboard-*")
 	if err != nil {
-		return DashboardResult{}, err
+		return "", err
 	}
 	defer os.Remove(f.Name())
-	if _, err = f.WriteString(marker + body); err == nil {
+	if _, err = f.WriteString(generatedMarker + body); err == nil {
 		err = f.Sync()
 	}
-	ce := f.Close()
-	if err != nil {
-		return DashboardResult{}, err
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
 	}
-	if ce != nil {
-		return DashboardResult{}, ce
+	if err != nil {
+		return "", err
 	}
 	if err = os.Rename(f.Name(), p); err != nil {
-		return DashboardResult{}, err
+		return "", err
 	}
-	if err := syncDir(filepath.Dir(p)); err != nil {
-		return DashboardResult{}, err
+	return p, syncDir(filepath.Dir(p))
+}
+
+func dashboardOwned(rel, body string) bool {
+	return strings.HasPrefix(body, generatedMarker) || (rel == "Thread/Overview.md" && strings.HasPrefix(body, "<!-- thread-generated-overview -->\n"))
+}
+
+func (s *Store) removeStaleDashboards(expected map[string]bool) error {
+	root, err := s.path("Thread")
+	if err != nil {
+		return err
 	}
-	return DashboardResult{Path: p, Warning: warning}, nil
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || (filepath.Base(path) != "summary.md" && filepath.Base(path) != "Dashboard.md") {
+			return nil
+		}
+		rel, err := filepath.Rel(s.Root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if expected[rel] {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(string(body), generatedMarker) {
+			return os.Remove(path)
+		}
+		return nil
+	})
 }

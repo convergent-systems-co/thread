@@ -325,6 +325,12 @@ func (s *Store) notesIn(dirs []string, allowDataless bool) ([]Note, VaultReadWar
 			if err != nil {
 				return &VaultReadError{Path: path, Err: err}
 			}
+			// Generated dashboards can live beneath Projects so that session
+			// summaries are navigable by project/date. They are views, not
+			// records, and must never enter the authoritative note ledger.
+			if dashboardOwned(filepath.ToSlash(filepath.Join("Thread", dir)), string(b)) || strings.HasPrefix(string(b), generatedMarker) {
+				return nil
+			}
 			n, err := Decode(b)
 			if err != nil {
 				return fmt.Errorf("%s: %w", path, err)
