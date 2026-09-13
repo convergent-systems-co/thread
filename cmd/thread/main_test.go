@@ -50,16 +50,16 @@ func TestInitAndDashboardReportGeneratedPath(t *testing.T) {
 	if err := run([]string{"--vault", vault, "init"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := out.String(); got != generated+"\n" {
-		t.Fatalf("init output = %q, want generated path %q", got, generated+"\n")
+	if got := out.String(); !strings.Contains(got, "Reset Thread dashboards:") || !strings.Contains(got, generated) {
+		t.Fatalf("init output = %q", got)
 	}
 
 	out.Reset()
 	if err := run([]string{"--vault", vault, "dashboard"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := out.String(), "Updated Thread dashboard: "+generated+"\n"; got != want {
-		t.Fatalf("dashboard output = %q, want %q", got, want)
+	if got := out.String(); !strings.Contains(got, "Reset Thread dashboards:") || !strings.Contains(got, "Dashboard home: "+generated) {
+		t.Fatalf("dashboard output = %q", got)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestDashboardReportsPartialVaultWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "Updated Thread dashboard: " + filepath.Join(resolvedVault, "Thread", "Overview.md") + "\n" +
+	want := "Reset Thread dashboards: 8 pages\nDashboard home: " + filepath.Join(resolvedVault, "Thread", "Overview.md") + "\n" +
 		"Warning: 1 vault record is not downloaded; skipped dataless iCloud file Thread/.items/evicted.md. Results below may be incomplete.\n"
 	if got := out.String(); got != want {
 		t.Fatalf("partial dashboard output = %q, want %q", got, want)

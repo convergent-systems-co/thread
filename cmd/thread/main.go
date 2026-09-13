@@ -191,6 +191,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		}
 		result, err := s.Dashboard("")
 		if err == nil {
+			fmt.Fprintf(out, "Reset Thread dashboards: %d pages\n", len(result.Paths))
 			fmt.Fprintln(out, result.Path)
 			if result.Warning.Skipped > 0 {
 				fmt.Fprintf(out, "Warning: %s. Results below may be incomplete.\n", result.Warning)
@@ -354,7 +355,8 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	case "dashboard":
 		result, err := s.Dashboard(*domain)
 		if err == nil {
-			fmt.Fprintf(out, "Updated Thread dashboard: %s\n", result.Path)
+			fmt.Fprintf(out, "Reset Thread dashboards: %d pages\n", len(result.Paths))
+			fmt.Fprintf(out, "Dashboard home: %s\n", result.Path)
 			if result.Warning.Skipped > 0 {
 				fmt.Fprintf(out, "Warning: %s. Results below may be incomplete.\n", result.Warning)
 			}

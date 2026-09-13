@@ -89,7 +89,8 @@ The archive **excludes Git history and index state, ignored files, unsaved edito
 Thread/
   Start Here.md       Entry point with editable Bases views
   Thread.base         Views of current items and projects
-  Overview.md         Generated overview; refresh with thread dashboard
+  Overview.md         Generated dashboard home; refresh with thread dashboard
+  Dashboards/          Generated Projects, Todos, Memories, Decisions, Discoveries, Sessions, and Graph setup pages
   Guide.md            In-vault usage notes
   Projects/           Stable project IDs
   .items/             Thread-managed captures, actions, decisions, memory, habits, recovery notes
@@ -100,7 +101,7 @@ Thread/
 
 Edit item `status`, `next`, `tags`, `related`, and other properties directly in Obsidian. The CLI retains unknown properties and the Markdown body on update; formatting of frontmatter may change. Keep IDs and required schema fields intact. Project and related wiki links feed backlinks and the graph. Inferred relationships should be proposed with supporting evidence; `link` records an explicit relationship, whose meaning can be described in the body.
 
-Use `Thread/Start Here.md` as the human-facing entry point. Its embedded Bases view and the generated overview link to Projects, Todos, Memories / Unassigned, Decisions, Discoveries, and project session history; projectless memories stay visible in the dedicated Memory section. The generated views link to authoritative records, rather than copying them. `.items/`, `.runs/`, and other dot-prefixed Thread directories remain managed storage and are intentionally excluded from graph-facing navigation.
+Use `Thread/Start Here.md` as the human-facing entry point. `thread dashboard` regenerates category pages for Projects, Todos, Memories / Unassigned, Decisions, Discoveries, and Sessions. Each project gets `Thread/Projects/<project-id>/Dashboard.md`, with project-specific captured types and links to date-based session summaries at `Sessions/<YYYY-MM-DD>/summary.md`. Projectless memories remain visible in the dedicated Memory dashboard. The generated views link to authoritative records, rather than copying them. `.items/`, `.runs/`, and other dot-prefixed Thread directories remain managed storage and are intentionally excluded from Bases and graph-facing navigation.
 
 Project session history is organized by the recorded calendar date: a session note uses its `created` timestamp, while lifecycle-event evidence uses its recorded `occurred_at` timestamp. Each entry links to its original record and uses recorded title/body or event text as a deterministic summary; Thread does not invent an AI session summary.
 
@@ -108,7 +109,7 @@ Creation flushes a temporary file before exclusive publication. CLI updates take
 
 On macOS, an iCloud/FileProvider vault may retain filenames and sizes while evicting file content. Thread detects these dataless records before reading them. `resume` skips them, reports that its result may be incomplete, and includes a `vault_warning` in JSON output; commands that require a complete vault fail clearly. All vault scans have a five-second read deadline. Lifecycle hooks have a separate three-second deadline and fail open with a `Thread hook capture skipped` message so a sync stall cannot hold an AI client session open.
 
-`Overview.md` is generated; it is replaced only if its ownership marker is present. `thread dashboard` refreshes that Markdown file and prints its path; `thread init` creates the standard views and also reports the generated overview path. Neither command opens Obsidian. Add `--domain home`, `--domain work`, or `--domain unknown` to generate a filtered view. When either refresh skips dataless vault records, it prints a bounded warning that the view may be incomplete; a normal complete-vault refresh prints no warning. Other user-owned notes are not rendered over, and a refresh ownership error is returned rather than reported as success. The selected vault's mobile location and actual iCloud propagation must be checked on the user's devices; local writes do not prove phone sync.
+`Overview.md` and every dashboard page are generated only when their ownership marker is present. `thread dashboard` resets all Thread-owned dashboard pages, reports how many it refreshed, and removes stale owned project/session summaries. It never replaces project notes or user-owned dashboard pages. `thread init` creates the standard entry points and performs the same refresh. Neither command opens Obsidian. Add `--domain home`, `--domain work`, or `--domain unknown` to generate a filtered view. When a refresh skips dataless vault records, it prints a bounded warning that the view may be incomplete. Obsidian's Graph filters are workspace settings, so Thread writes `Thread/Dashboards/Graph.md` with the required dot-folder filter instead of overwriting `.obsidian` configuration. The selected vault's mobile location and actual iCloud propagation must be checked on the user's devices; local writes do not prove phone sync.
 
 ## Companion skill
 
